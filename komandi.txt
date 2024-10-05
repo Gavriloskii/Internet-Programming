@@ -1,0 +1,14 @@
+# Start the SSH agent
+eval "$(ssh-agent -s)"
+
+# Add your SSH key
+ssh-add ~/.ssh/id_rsa  # or ~/.ssh/keyfile if you used a different name
+
+# Navigate to your project
+cd ~/Desktop/javascript  # Adjust the path as needed
+
+# Check status, add changes, commit, and push
+git status
+git add .
+git commit -m "Your commit message"
+git push
