@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Basic Webpage</title>
+</head>
+<body>
+    <h1 id="myHeading">Welcome to My Webpage</h1>
+    <button onclick="changeText()">Change text</button>
+
+    <h2>About this page</h2>
+    <p id="myParagraph">This is a basic example of a webpage</p>
+    <button onclick="changeColor()">Change color</button>
+    <button onclick="changeheading1()">Change heading color</button>
+    
+    <h2>Interesting links</h2>
+    <p>Here are some links
+        <a href="https://www.google.com" id="linkot">google</a>
+        <button onclick="changeAttribute()">Change attribute</button>
+        <a href="https://www.example.com">example</a>
+    </p>
+
+    <p>Contact us</p>
+    <form id="forma" onsubmit="return submitDetails()">
+        <label for="name">Name:</label><br>
+        <input type="text" id="name" required><br><br>
+
+        <label for="email">Email:</label><br>
+        <input type="email" id="email" required><br><br>
+
+        <label for="message">Message:</label><br>
+        <input type="text" id="message" required><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+    <p id="feedback"></p>
+    <div>
+        <img src="https://via.placeholder.com/150"  onclick="showImage(this.src)" alt="Image 1">
+        <img src="https://via.placeholder.com/150/ff0000/ffffff"  onclick="showImage(this.src)" alt="Image 2">
+        <img src="https://via.placeholder.com/150/00ff00/000000"  onclick="showImage(this.src)" alt="Image 3">
+        <img src="https://via.placeholder.com/150/0000ff/ffffff"  onclick="showImage(this.src)" alt="Image 4">
+    </div>
+    <img id="largeImage" alt="Large View" width="500px" height="500px">
+    <h1>Dynamic list</h1>
+    <input type="text" id="itemInput" placeholder="Add new item" required>
+    <button onclick="addItem()">Add</button>
+
+    <ul id="itemList"></ul>
+
+
+    <h1>Calculator</h1>
+    <div>
+        <input type="text" id="display" disabled>
+        <br>
+        <input type="button" value="7" onclick="appendNumber('7')">
+        <input type="button" value="8" onclick="appendNumber('8')">
+        <input type="button" value="9" onclick="appendNumber('9')">
+        <input type="button" value="/" onclick="appendOperator('/')">
+        <br>
+        <input type="button" value="4" onclick="appendNumber('4')">
+        <input type="button" value="5" onclick="appendNumber('5')">
+        <input type="button" value="6" onclick="appendNumber('6')">
+        <input type="button" value="*" onclick="appendOperator('*')">
+        <br>
+        <input type="button" value="1" onclick="appendNumber('1')">
+        <input type="button" value="2" onclick="appendNumber('2')">
+        <input type="button" value="3" onclick="appendNumber('3')">
+        <input type="button" value="-" onclick="appendOperator('-')">
+        <br>
+        <input type="button" value="0" onclick="appendNumber('0')">
+        <input type="button" value="," onclick="appendNumber('.')">
+        <input type="button" value="C" onclick="clearDisplay()">
+        <input type="button" value="+" onclick="appendOperator('+')">
+        <br>
+        <input type="button" value="=" onclick="calculateResult()" style="width: 250px;">
+        
+    </div>
+
+    <script src="basic.js"></script>
+</body>
+</html>
