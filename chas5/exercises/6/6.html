@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather app</title>
+</head>
+<body>
+    <h1>Current Weather</h1>
+
+    <div>
+        <label for="cityInput">Enter City:</label>
+        <input type="text" id="cityInput" placeholder="e.g. Skopje">
+        <button id="getWeatherBtn">Get Weather</button>
+    </div>
+
+    <div id="weatherInfo" style="margin-top: 20px;">
+        <p><strong>City:</strong><span id="cityName">-</span></p>
+        <p><strong>Temperature:</strong><span id="temperature">-</span>°C</p>
+        <p><strong>Weather:</strong><span id="weather">-</span></p>
+        <p><strong>Humidity:</strong><span id="humidity"></span>-</p>
+    </div>
+
+    <script src="6.js"></script>
+</body>
+</html>
