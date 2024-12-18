@@ -33,7 +33,7 @@ const SwipeToMatch = () => {
     const [hasMore, setHasMore] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
-    const [loadingState, setLoadingState] = useState('idle'); // 'idle' | 'loading' | 'error' | 'success'
+    const [loadingState, setLoadingState] = useState('idle');
     const [networkStatus, setNetworkStatus] = useState(navigator.onLine);
     const [lastSwipeDirection, setLastSwipeDirection] = useState(null);
     const [preloadedImages, setPreloadedImages] = useState(new Set());
@@ -91,12 +91,11 @@ const SwipeToMatch = () => {
         });
     }, [dispatch]);
 
-    // Enhanced image preloading with error recovery and progressive loading
+    // Enhanced image preloading with error recovery
     const preloadImages = useCallback((users) => {
-        const priorityQueue = users.slice(0, 3); // Immediate preload for next 3 cards
-        const backgroundQueue = users.slice(3); // Background preload for rest
+        const priorityQueue = users.slice(0, 3);
+        const backgroundQueue = users.slice(3);
 
-        // Priority preloading
         priorityQueue.forEach(user => {
             if (user.profilePicture && !preloadedImages.has(user.profilePicture)) {
                 const img = new Image();
@@ -110,7 +109,6 @@ const SwipeToMatch = () => {
             }
         });
 
-        // Background preloading
         requestIdleCallback(() => {
             backgroundQueue.forEach(user => {
                 if (user.profilePicture && !preloadedImages.has(user.profilePicture)) {
@@ -127,16 +125,13 @@ const SwipeToMatch = () => {
         });
     }, [preloadedImages]);
 
-    // Optimized match queue processing with batching
+    // Optimized match queue processing
     const processMatchQueue = useCallback(async () => {
         if (matchQueue.length === 0) return;
 
-        // Process matches in batches for better performance
-        const BATCH_SIZE = 3;
-        const currentBatch = matchQueue.slice(0, BATCH_SIZE);
+        const currentBatch = matchQueue.slice(0, 3);
         
         try {
-            // Process all matches in current batch concurrently
             const results = await Promise.allSettled(
                 currentBatch.map(async match => {
                     try {
@@ -149,18 +144,15 @@ const SwipeToMatch = () => {
                 })
             );
 
-            // Handle successful matches
             const successfulMatches = results
                 .filter(r => r.status === 'fulfilled' && r.value.result?.isMatch)
                 .map(r => r.value);
 
             if (successfulMatches.length > 0) {
-                // Sort matches by score for better UX
                 successfulMatches.sort((a, b) => 
                     (b.result.matchScore || 0) - (a.result.matchScore || 0)
                 );
 
-                // Show matches with staggered timing
                 successfulMatches.forEach((match, index) => {
                     setTimeout(() => {
                         handleMatch({
@@ -168,10 +160,9 @@ const SwipeToMatch = () => {
                             conversation: match.result.conversation,
                             matchScore: match.result.matchScore
                         });
-                    }, index * 800); // Stagger notifications
+                    }, index * 800);
                 });
 
-                // Trigger haptic feedback for matches
                 if (window.navigator.vibrate) {
                     window.navigator.vibrate(successfulMatches.map(() => [50, 100]).flat());
                 }
@@ -179,11 +170,9 @@ const SwipeToMatch = () => {
         } catch (err) {
             console.error('Batch processing error:', err);
         } finally {
-            // Remove processed matches from queue
-            setMatchQueue(prev => prev.slice(BATCH_SIZE));
+            setMatchQueue(prev => prev.slice(3));
             
-            // Process next batch if available
-            if (matchQueue.length > BATCH_SIZE) {
+            if (matchQueue.length > 3) {
                 setTimeout(processMatchQueue, 1000);
             }
         }
@@ -204,7 +193,7 @@ const SwipeToMatch = () => {
         });
     }, [swipeHistory]);
 
-    // Optimized match loading with enhanced error handling and retry logic
+    // Load potential matches
     const loadPotentialMatches = useCallback(async (resetList = false, isRefresh = false) => {
         if (!networkStatus) {
             setError('No internet connection. Please check your network.');
@@ -212,16 +201,13 @@ const SwipeToMatch = () => {
         }
 
         setLoadingState('loading');
-        // Cancel any pending requests
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
         }
         abortControllerRef.current = new AbortController();
 
-        // Clear loading timeout
         clearTimeout(loadingTimeoutRef.current);
 
-        // Set loading state with delay to prevent flashing
         loadingTimeoutRef.current = setTimeout(() => {
             if (!potentialMatches.length) {
                 setIsLoading(true);
@@ -229,7 +215,6 @@ const SwipeToMatch = () => {
         }, 500);
 
         try {
-            // Reset state if needed
             if (resetList) {
                 setPage(1);
                 setPotentialMatches([]);
@@ -237,19 +222,17 @@ const SwipeToMatch = () => {
                 setLastSwipeDirection(null);
             }
 
-            // Enhanced pagination with optimized batch size
             const currentPage = resetList || isRefresh ? 1 : page;
             const batchSize = resetList ? BATCH_SIZE * 2 : 
                              networkStatus === 'slow' ? Math.floor(BATCH_SIZE / 2) : BATCH_SIZE;
 
-            // Fetch matches with optimized parameters
             const response = await users.getPotentialMatches(
                 currentPage,
                 {
                     ...filters,
                     lastSwipeDirection,
                     limit: batchSize,
-                    includeDetails: currentPage === 1 // Load full details only for first batch
+                    includeDetails: currentPage === 1
                 },
                 abortControllerRef.current.signal
             );
@@ -261,7 +244,6 @@ const SwipeToMatch = () => {
 
             const data = await response.json();
             
-            // Validate and process matches
             const validMatches = data.data
                 .filter(match => (
                     match?._id &&
@@ -275,13 +257,10 @@ const SwipeToMatch = () => {
                     matchScore: match.matchScore || 0
                 }));
 
-            // Sort matches by score for better UX
             validMatches.sort((a, b) => b.matchScore - a.matchScore);
 
-            // Update state
             setPotentialMatches(prev => {
                 const newMatches = resetList || isRefresh ? validMatches : [...prev, ...validMatches];
-                // Preload images for next few matches
                 preloadImages(newMatches.slice(currentIndex, currentIndex + 3));
                 return newMatches;
             });
@@ -289,7 +268,6 @@ const SwipeToMatch = () => {
             setHasMore(validMatches.length >= batchSize);
             setRetryCount(0);
 
-            // Handle refresh completion
             if (isRefresh) {
                 setIsRefreshing(false);
                 toast.success('New matches found!');
@@ -301,16 +279,14 @@ const SwipeToMatch = () => {
             console.error('Error loading matches:', err);
             setLoadingState('error');
             
-            // Enhanced error handling with network awareness
             if (!networkStatus) {
                 setError('Network connection lost. Reconnecting...');
                 return;
             }
 
-            // Implement exponential backoff with jitter for retries
             if (retryCount < MAX_RETRIES) {
                 const baseDelay = RETRY_DELAY * Math.pow(2, retryCount);
-                const jitter = Math.random() * 1000; // Add randomness to prevent thundering herd
+                const jitter = Math.random() * 1000;
                 const delay = Math.min(baseDelay + jitter, 10000);
                 
                 toast.error(
@@ -340,7 +316,7 @@ const SwipeToMatch = () => {
             setIsLoading(false);
             setLoadingState('idle');
         }
-    }, [page, filters, potentialMatches, retryCount, lastSwipeDirection, preloadImages]);
+    }, [page, filters, potentialMatches, currentIndex, retryCount, lastSwipeDirection, networkStatus, preloadImages]);
 
     // Pull-to-refresh handlers
     const handleTouchStart = useCallback((e) => {
@@ -406,7 +382,7 @@ const SwipeToMatch = () => {
         }
     }, [currentIndex, potentialMatches.length, isLoading, hasMore, loadPotentialMatches]);
 
-    // Enhanced swipe handling with optimistic updates and undo capability
+    // Handle swipe
     const handleSwipe = useCallback(async (direction) => {
         const potentialMatch = potentialMatches[currentIndex];
         if (!potentialMatch) return;
@@ -415,7 +391,6 @@ const SwipeToMatch = () => {
             setIsLoading(true);
             setLastSwipeDirection(direction);
             
-            // Optimistic update
             setCurrentIndex(prev => prev + 1);
             setSwipeHistory(prev => [...prev, { user: potentialMatch, direction }]);
             setLastSwipeTimestamp(Date.now());
@@ -430,17 +405,14 @@ const SwipeToMatch = () => {
             if (direction === 'right') {
                 const swipePromise = socketService.swipe(potentialMatch._id, direction);
                 
-                // Add to match queue for smoother UX
                 setMatchQueue(prev => [...prev, {
                     user: potentialMatch,
                     promise: swipePromise
                 }]);
 
-                // Process match queue
                 processMatchQueue();
             }
 
-            // Preload next batch if needed
             if (currentIndex >= potentialMatches.length - PRELOAD_THRESHOLD && hasMore) {
                 setPage(prev => prev + 1);
             }
@@ -449,11 +421,9 @@ const SwipeToMatch = () => {
             console.error('Swipe error:', err);
             toast.error('Failed to process swipe. Please try again.');
             
-            // Revert optimistic update
             setCurrentIndex(prev => Math.max(prev - 1, 0));
             setSwipeHistory(prev => prev.slice(0, -1));
             
-            // Show undo option
             toast((t) => (
                 <div>
                     <p>Failed to process swipe.</p>
@@ -484,13 +454,13 @@ const SwipeToMatch = () => {
         setShowFilters(prev => !prev);
     }, []);
 
-    // Enhanced loading state with network status
+    // Loading state
     const renderLoadingState = () => {
         if (loadingState === 'loading' && potentialMatches.length === 0) {
             return (
                 <div className="min-h-[80vh] flex items-center justify-center">
                     <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
                         <p className="mt-4 text-gray-600 dark:text-gray-400">
                             {networkStatus ? 'Finding your perfect travel buddy...' : 'Connecting...'}
                         </p>
@@ -506,7 +476,7 @@ const SwipeToMatch = () => {
         return null;
     };
 
-    // Enhanced error state with retry functionality
+    // Error state
     const renderErrorState = () => {
         if (loadingState === 'error' || error) {
             return (
@@ -569,99 +539,101 @@ const SwipeToMatch = () => {
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                 >
-            {/* Pull to Refresh Indicator */}
-            {isPulling && (
-                <motion.div 
-                    className="absolute top-0 left-0 right-0 flex justify-center"
-                    initial={{ opacity: 0 }}
-                    animate={{ 
-                        y: pullMoveY,
-                        opacity: Math.min(pullMoveY / PULL_TO_REFRESH_THRESHOLD, 1)
-                    }}
-                >
-                    <div className="bg-white dark:bg-gray-800 rounded-full p-2 shadow-lg">
-                        {isRefreshing ? (
-                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-                        ) : (
-                            <span className="text-sm text-gray-600 dark:text-gray-400">
-                                {pullMoveY >= PULL_TO_REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}
-                            </span>
-                        )}
-                    </div>
-                </motion.div>
-            )}
+                    {/* Pull to Refresh Indicator */}
+                    {isPulling && (
+                        <motion.div 
+                            className="absolute top-0 left-0 right-0 flex justify-center"
+                            initial={{ opacity: 0 }}
+                            animate={{ 
+                                y: pullMoveY,
+                                opacity: Math.min(pullMoveY / PULL_TO_REFRESH_THRESHOLD, 1)
+                            }}
+                        >
+                            <div className="bg-white dark:bg-gray-800 rounded-full p-2 shadow-lg">
+                                {isRefreshing ? (
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500" />
+                                ) : (
+                                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                                        {pullMoveY >= PULL_TO_REFRESH_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}
+                                    </span>
+                                )}
+                            </div>
+                        </motion.div>
+                    )}
 
-            {/* Filter Toggle Button */}
-            <button
-                onClick={toggleFilters}
-                className="absolute top-4 right-4 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg z-10"
-                aria-label="Toggle filters"
-            >
-                <AdjustmentsHorizontalIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
-            </button>
-
-            {/* Filters Panel */}
-            <AnimatePresence>
-                {showFilters && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 300 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 300 }}
-                        className="fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-gray-800 shadow-xl z-50"
+                    {/* Filter Toggle Button */}
+                    <button
+                        onClick={toggleFilters}
+                        className="absolute top-4 right-4 bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg z-10"
+                        aria-label="Toggle filters"
                     >
-                        <MatchFilters
-                            filters={filters}
-                            onChange={handleFilterChange}
-                            onClose={toggleFilters}
-                        />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        <AdjustmentsHorizontalIcon className="h-6 w-6 text-gray-600 dark:text-gray-300" />
+                    </button>
 
-            {/* Loading Indicator */}
-            {isLoading && (
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    {/* Filters Panel */}
+                    <AnimatePresence>
+                        {showFilters && (
+                            <motion.div
+                                initial={{ opacity: 0, x: 300 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 300 }}
+                                className="fixed right-0 top-0 h-full w-full max-w-md bg-white dark:bg-gray-800 shadow-xl z-50"
+                            >
+                                <MatchFilters
+                                    filters={filters}
+                                    onChange={handleFilterChange}
+                                    onClose={toggleFilters}
+                                />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Loading Indicator */}
+                    {isLoading && (
+                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+                        </div>
+                    )}
+
+                    {/* Swipe Cards */}
+                    <div className="max-w-lg mx-auto relative h-[600px]">
+                        <AnimatePresence>
+                            {potentialMatches.map((user, index) => {
+                                if (index < currentIndex) return null;
+                                
+                                const isTop = index === currentIndex;
+                                
+                                return (
+                                    <SwipeCard
+                                        key={user._id}
+                                        user={user}
+                                        isTop={isTop}
+                                        onSwipe={handleSwipe}
+                                        style={{
+                                            position: 'absolute',
+                                            width: '100%',
+                                            height: '100%',
+                                            zIndex: potentialMatches.length - index
+                                        }}
+                                        analytics={analytics}
+                                    />
+                                );
+                            })}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Match Notification */}
+                    <AnimatePresence>
+                        {showMatch && matchedUser && (
+                            <MatchNotification
+                                user={matchedUser}
+                                onClose={closeMatchNotification}
+                            />
+                        )}
+                    </AnimatePresence>
                 </div>
             )}
-
-            {/* Swipe Cards */}
-            <div className="max-w-lg mx-auto relative h-[600px]">
-                <AnimatePresence>
-                    {potentialMatches.map((user, index) => {
-                        if (index < currentIndex) return null;
-                        
-                        const isTop = index === currentIndex;
-                        
-                        return (
-                            <SwipeCard
-                                key={user._id}
-                                user={user}
-                                isTop={isTop}
-                                onSwipe={handleSwipe}
-                                style={{
-                                    position: 'absolute',
-                                    width: '100%',
-                                    height: '100%',
-                                    zIndex: potentialMatches.length - index
-                                }}
-                                analytics={analytics}
-                            />
-                        );
-                    })}
-                </AnimatePresence>
-            </div>
-
-            {/* Match Notification */}
-            <AnimatePresence>
-                {showMatch && matchedUser && (
-                    <MatchNotification
-                        user={matchedUser}
-                        onClose={closeMatchNotification}
-                    />
-                )}
-            </AnimatePresence>
-        </div>
+        </>
     );
 };
 

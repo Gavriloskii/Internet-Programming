@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { motion, useSpring, useTransform, useAnimation } from 'framer-motion';
 import { useGesture } from '@use-gesture/react';
 import {
@@ -20,16 +20,17 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
     const controls = useAnimation();
     const hapticTimeout = useRef(null);
 
-    // Enhanced spring physics optimized for mobile and desktop
-    const springConfig = {
+    // Enhanced spring physics with adaptive configuration
+    const springConfig = useMemo(() => ({
         stiffness: window.innerWidth <= 768 ? 250 : 300,    // Adjusted for device
         damping: window.innerWidth <= 768 ? 25 : 30,        // Smoother on mobile
         mass: 0.8,          // Lighter mass for better responsiveness
         restDelta: 0.0005,  // More precise rest position
         restSpeed: 0.0005,  // More precise rest speed
         bounce: 0.2,        // Subtle bounce for natural feel
-        duration: 0.35      // Faster for better responsiveness
-    };
+        duration: 0.35,     // Faster for better responsiveness
+        adaptive: true      // Enable adaptive physics
+    }), []);
 
     const x = useSpring(0, springConfig);
     const y = useSpring(0, springConfig);
