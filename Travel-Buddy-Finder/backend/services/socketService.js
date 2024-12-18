@@ -17,10 +17,17 @@ class SocketService {
             cors: {
                 origin: process.env.FRONTEND_URL || 'http://localhost:3000',
                 methods: ['GET', 'POST'],
-                credentials: true
+                credentials: true,
+                allowedHeaders: ['Cookie', 'cookie', 'authorization']
             },
             pingTimeout: 60000,
-            pingInterval: 25000
+            pingInterval: 25000,
+            cookie: {
+                name: 'jwt',
+                httpOnly: true,
+                sameSite: 'strict',
+                secure: process.env.NODE_ENV === 'production'
+            }
         });
 
         this.io.use(this.authenticateSocket.bind(this));
@@ -31,20 +38,36 @@ class SocketService {
 
     async authenticateSocket(socket, next) {
         try {
-            const token = socket.handshake.auth.token;
+            // Get token from cookie
+            const cookies = socket.handshake.headers.cookie?.split(';').reduce((acc, cookie) => {
+                const [key, value] = cookie.trim().split('=');
+                acc[key] = value;
+                return acc;
+            }, {});
+
+            const token = cookies?.jwt;
+
             if (!token) {
-                return next(new Error('Authentication error'));
+                console.error('No token found in cookies:', cookies);
+                return next(new Error('Authentication error: No token found'));
             }
 
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await User.findById(decoded.id).select('_id name');
-            
-            if (!user) {
-                return next(new Error('User not found'));
-            }
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                const user = await User.findById(decoded.id).select('_id name');
+                
+                if (!user) {
+                    console.error('User not found for token:', decoded);
+                    return next(new Error('User not found'));
+                }
 
-            socket.user = user;
-            next();
+                socket.user = user;
+                console.log('Socket authenticated for user:', user._id);
+                next();
+            } catch (jwtError) {
+                console.error('JWT verification error:', jwtError, 'Token:', token);
+                return next(new Error('Invalid token'));
+            }
         } catch (error) {
             console.error('Socket authentication error:', error);
             next(new Error('Authentication error'));

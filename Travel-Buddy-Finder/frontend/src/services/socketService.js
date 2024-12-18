@@ -25,13 +25,13 @@ class SocketService {
         this.pendingMessages = new Map();
     }
 
-    connect(token) {
+    connect() {
         if (this.connected) return;
 
         const socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001';
         
         this.socket = io(socketUrl, {
-            auth: { token },
+            withCredentials: true, // Enable sending cookies
             transports: ['websocket'],
             reconnection: true,
             reconnectionDelay: this.reconnectDelay,

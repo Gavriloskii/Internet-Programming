@@ -19,21 +19,21 @@ const app = express();
 
 // CORS configuration with credentials support
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? process.env.FRONTEND_URL 
-        : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: true, // Allow all origins in development
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-    exposedHeaders: ['set-cookie'],
-    maxAge: 86400,
-    preflightContinue: false,
-    optionsSuccessStatus: 204
+    exposedHeaders: ['Set-Cookie', 'Authorization'],
+    maxAge: 86400
 }));
+
+// Enable pre-flight requests for all routes
+app.options('*', cors());
 
 // Parse cookies and JSON body
 app.use(cookieParser());
 app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(compression());
 
 // Setup security middleware

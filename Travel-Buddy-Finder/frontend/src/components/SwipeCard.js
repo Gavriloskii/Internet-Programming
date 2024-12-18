@@ -20,15 +20,15 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
     const controls = useAnimation();
     const hapticTimeout = useRef(null);
 
-    // Enhanced spring physics for more natural and responsive animations
+    // Enhanced spring physics optimized for mobile and desktop
     const springConfig = {
-        stiffness: 400,    // Reduced for smoother motion
-        damping: 40,       // Balanced for natural movement
-        mass: 1.2,         // Increased for more weight and momentum
-        restDelta: 0.0001,
-        restSpeed: 0.0001,
-        bounce: 0.25,      // Increased bounce for playful feel
-        duration: 0.5      // Added duration control
+        stiffness: window.innerWidth <= 768 ? 250 : 300,    // Adjusted for device
+        damping: window.innerWidth <= 768 ? 25 : 30,        // Smoother on mobile
+        mass: 0.8,          // Lighter mass for better responsiveness
+        restDelta: 0.0005,  // More precise rest position
+        restSpeed: 0.0005,  // More precise rest speed
+        bounce: 0.2,        // Subtle bounce for natural feel
+        duration: 0.35      // Faster for better responsiveness
     };
 
     const x = useSpring(0, springConfig);
@@ -60,14 +60,14 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
         ease: [0.32, 0.72, 0, 1]
     });
 
-    // Optimized constants for fluid swipe interactions
-    const SWIPE_THRESHOLD = 80;            // Further reduced for easier swipes
-    const SWIPE_VELOCITY_THRESHOLD = 0.25; // Reduced for more forgiving detection
-    const ROTATION_FACTOR = 0.2;           // Increased for more dynamic rotation
-    const HAPTIC_THRESHOLD = 12;           // Reduced for more responsive feedback
-    const DRAG_ELASTIC = 0.7;              // Increased for smoother edge resistance
-    const SCALE_FACTOR = 0.92;             // More pronounced scale effect
-    const VELOCITY_SCALE = 2.5;            // Increased for snappier animations
+    // Optimized constants for responsive swipe interactions
+    const SWIPE_THRESHOLD = window.innerWidth <= 768 ? 60 : 80;  // Adjusted for screen size
+    const SWIPE_VELOCITY_THRESHOLD = 0.4;  // More forgiving velocity threshold
+    const ROTATION_FACTOR = window.innerWidth <= 768 ? 0.12 : 0.15;  // Adjusted rotation
+    const HAPTIC_THRESHOLD = 3;            // Earlier haptic feedback
+    const DRAG_ELASTIC = window.innerWidth <= 768 ? 0.7 : 0.6;   // More elastic on mobile
+    const SCALE_FACTOR = window.innerWidth <= 768 ? 0.97 : 0.95; // Subtle scale on mobile
+    const VELOCITY_SCALE = window.innerWidth <= 768 ? 2.5 : 3;   // Adjusted for device
     const ROTATION_SPRING = {              // Enhanced rotation spring physics
         stiffness: 350,
         damping: 35,
@@ -117,27 +117,34 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
         }
     }, [isTop, handleKeyDown]);
 
-    // Enhanced gesture handling with improved animations, feedback, and edge cases
+    // Optimized gesture handling with device-specific enhancements
     const bind = useGesture({
         onDragStart: ({ event }) => {
             event?.preventDefault();
             setSwipeStartTime(Date.now());
             
-            // Enhanced initial animation
+            // Device-optimized initial animation
             controls.start({
                 scale: SCALE_FACTOR,
-                transition: { duration: 0.2, ease: [0.32, 0.72, 0, 1] }
+                transition: { 
+                    type: 'spring',
+                    stiffness: window.innerWidth <= 768 ? 350 : 400,
+                    damping: window.innerWidth <= 768 ? 20 : 25,
+                    mass: 0.7,
+                    duration: 0.12,
+                    ease: [0.32, 1.48, 0.62, 1]
+                }
             });
 
-            // Improved haptic feedback pattern
+            // Enhanced haptic feedback pattern
             if (window.navigator.vibrate) {
-                window.navigator.vibrate([8, 12]); // More subtle initial feedback
+                window.navigator.vibrate([5, 8]); // Even more subtle initial feedback
             }
 
-            // Reset any ongoing animations
-            x.stop();
-            y.stop();
-            rotate.stop();
+            // Reset any ongoing animations with smooth transitions
+            x.set(x.get(), false);
+            y.set(y.get(), false);
+            rotate.set(rotate.get(), false);
         },
         onDrag: ({ movement: [mx, my], down, velocity: [vx, vy], direction: [xDir], event, delta: [dx, dy] }) => {
             event?.preventDefault();
@@ -160,23 +167,27 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
 
             if (down && deltaDistance > 0) {
                 // Enhanced motion calculations with improved physics
-                const resistance = Math.min(swipeDistance / 500, 0.65);
+                const resistance = Math.min(swipeDistance / 400, 0.5);
                 const elasticX = mx * (1 - resistance) * DRAG_ELASTIC;
-                const elasticY = my * (1 - resistance) * DRAG_ELASTIC * 0.4; // Further reduced vertical movement
-                const rotationAngle = (elasticX * ROTATION_FACTOR) * (1 - resistance * 0.5);
-                const scaleValue = Math.max(SCALE_FACTOR, 1 - (swipeProgress * 0.1));
+                const elasticY = my * (1 - resistance) * DRAG_ELASTIC * 0.3; // Reduced vertical movement
+                const rotationAngle = (elasticX * ROTATION_FACTOR) * Math.min(1, swipeDistance / 200);
+                const scaleValue = Math.max(SCALE_FACTOR, 1 - (swipeProgress * 0.15));
+
+                // Add momentum-based rotation
+                const velocityRotation = vx * 0.05;
+                const finalRotation = rotationAngle + velocityRotation;
 
                 // Optimized motion updates with enhanced animation frames
                 requestAnimationFrame(() => {
                     x.set(elasticX, false);
                     y.set(elasticY, false);
-                    rotate.set(rotationAngle, false, ROTATION_SPRING);
+                    rotate.set(finalRotation, false, ROTATION_SPRING);
                     scaleSpring.set(scaleValue, false);
 
-                    // Add subtle perspective tilt based on movement
-                    const tiltX = (dy / window.innerHeight) * 15;
-                    const tiltY = -(dx / window.innerWidth) * 15;
-                    cardRef.current.style.transform += ` rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+                    // Combine velocity and movement-based perspective tilt
+                    const tiltX = ((vy / 2) + (dy / window.innerHeight)) * 15;
+                    const tiltY = (-(vx / 2) - (dx / window.innerWidth)) * 15;
+                    cardRef.current.style.transform = `rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
                 });
 
                 // Enhanced indicator animations with smoother transitions
@@ -212,32 +223,47 @@ const SwipeCard = ({ user, isTop, onSwipe, style, analytics = { track: () => {} 
                     const exitY = my + (vy * 100); // Further reduced vertical exit movement
                     const exitRotation = direction === 'left' ? -90 : 90;
                     
-                    // Enhanced exit animation sequence with improved transitions
-                    const sequence = async () => {
-                        // Initial pop effect
-                        await controls.start({
-                            scale: 1.1,
-                            transition: { duration: 0.1, ease: [0.34, 1.56, 0.64, 1] }
-                        });
-
-                        // Main exit animation with enhanced physics
-                        await Promise.all([
-                            controls.start({
-                                x: exitDistance,
-                                y: exitY,
-                                rotate: exitRotation,
-                                scale: 0.5,
-                                opacity: 0,
-                                transition: {
-                                    duration: 0.5 / exitVelocity,
-                                    ease: [0.32, 0.72, 0, 1],
-                                    opacity: { duration: 0.15 },
-                                    scale: {
-                                        duration: 0.4 / exitVelocity,
-                                        ease: [0.34, 1.56, 0.64, 1]
+                            // Enhanced exit animation sequence with spring physics
+                            const sequence = async () => {
+                                // Initial pop effect with spring
+                                await controls.start({
+                                    scale: 1.15,
+                                    transition: { 
+                                        type: 'spring',
+                                        stiffness: 500,
+                                        damping: 15,
+                                        mass: 0.6,
+                                        duration: 0.15
                                     }
-                                }
-                            }),
+                                });
+
+                                // Main exit animation with enhanced spring physics
+                                await Promise.all([
+                                    controls.start({
+                                        x: exitDistance,
+                                        y: exitY,
+                                        rotate: exitRotation,
+                                        scale: 0.5,
+                                        opacity: 0,
+                                        transition: {
+                                            type: 'spring',
+                                            stiffness: 150,
+                                            damping: 20,
+                                            mass: 0.8,
+                                            velocity: exitVelocity * 2,
+                                            restSpeed: 0.001,
+                                            restDelta: 0.001,
+                                            duration: 0.6 / exitVelocity,
+                                            opacity: { 
+                                                duration: 0.2,
+                                                ease: [0.32, 0.72, 0, 1]
+                                            },
+                                            scale: {
+                                                duration: 0.5 / exitVelocity,
+                                                ease: [0.34, 1.56, 0.64, 1]
+                                            }
+                                        }
+                                    }),
                             // Enhanced haptic feedback pattern for exit
                             window.navigator.vibrate?.([10, 25, 10])
                         ]);

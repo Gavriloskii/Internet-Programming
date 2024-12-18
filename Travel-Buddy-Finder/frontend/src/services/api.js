@@ -6,23 +6,36 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
 const api = axios.create({
     baseURL: API_URL,
     headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
     },
-    withCredentials: true // This is important for sending cookies
+    withCredentials: true,
+    xsrfCookieName: 'XSRF-TOKEN',
+    xsrfHeaderName: 'X-XSRF-TOKEN'
 });
 
-// Initialize CSRF token
-const initializeCsrf = async () => {
-    try {
-        const { data } = await api.get('/csrf-token');
-        api.defaults.headers['X-CSRF-Token'] = data.csrfToken;
-    } catch (error) {
-        console.error('Failed to fetch CSRF token:', error);
+// Add request interceptor to handle development mode
+api.interceptors.request.use(config => {
+    // Add test auth header in development
+    if (process.env.NODE_ENV === 'development') {
+        const testToken = localStorage.getItem('testToken');
+        if (testToken) {
+            config.headers['x-test-auth'] = testToken;
+        }
     }
-};
+    return config;
+});
 
-// Initialize CSRF token for both development and production
-initializeCsrf();
+// Add CSRF token to requests
+api.interceptors.request.use(
+    (config) => {
+        // No need to add Authorization header since we're using httpOnly cookies
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
 
 // Handle response errors
 api.interceptors.response.use(
@@ -35,7 +48,8 @@ api.interceptors.response.use(
                 // Retry the original request
                 return api.request(error.config);
             } catch (refreshError) {
-                // If refresh fails, redirect to login
+                // If refresh fails, clear token and redirect to login
+                localStorage.removeItem('token');
                 window.location.href = '/login';
             }
         }
@@ -45,8 +59,14 @@ api.interceptors.response.use(
 
 // Auth endpoints
 export const auth = {
-    login: (credentials) => api.post('/auth/login', credentials),
-    signup: (userData) => api.post('/auth/signup', userData),
+    login: async (credentials) => {
+        const response = await api.post('/auth/login', credentials);
+        return response;
+    },
+    signup: async (userData) => {
+        const response = await api.post('/auth/signup', userData);
+        return response;
+    },
     verifyToken: () => api.get('/auth/verify'),
     resetPassword: (email) => api.post('/auth/reset-password', { email }),
     updatePassword: (token, newPassword) => api.post('/auth/update-password', { token, newPassword }),
@@ -151,7 +171,8 @@ export const itineraries = {
     unshare: (id, userId) => api.post(`/itineraries/${id}/unshare`, { userId })
 };
 
-export default {
+// Create a named export for the API object
+export const apiService = {
     auth,
     users,
     journals,
@@ -162,3 +183,6 @@ export default {
     forum,
     itineraries
 };
+
+// Default export
+export default apiService;

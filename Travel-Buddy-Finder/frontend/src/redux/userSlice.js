@@ -19,6 +19,9 @@ export const signupUser = createAsyncThunk(
     async (userData, { rejectWithValue }) => {
         try {
             const response = await auth.signup(userData);
+            if (!response.data.data.user) {
+                throw new Error('No user data received');
+            }
             return response.data.data.user;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || 'Signup failed');
@@ -31,6 +34,9 @@ export const loginUser = createAsyncThunk(
     async (credentials, { rejectWithValue }) => {
         try {
             const response = await auth.login(credentials);
+            if (!response.data.data.user) {
+                throw new Error('No user data received');
+            }
             return response.data.data.user;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || 'Login failed');

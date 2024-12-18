@@ -33,6 +33,8 @@ const SwipeToMatch = () => {
     const [hasMore, setHasMore] = useState(true);
     const [retryCount, setRetryCount] = useState(0);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [loadingState, setLoadingState] = useState('idle'); // 'idle' | 'loading' | 'error' | 'success'
+    const [networkStatus, setNetworkStatus] = useState(navigator.onLine);
     const [lastSwipeDirection, setLastSwipeDirection] = useState(null);
     const [preloadedImages, setPreloadedImages] = useState(new Set());
     const [swipeHistory, setSwipeHistory] = useState([]);
@@ -49,7 +51,21 @@ const SwipeToMatch = () => {
     const [pullMoveY, setPullMoveY] = useState(0);
     const [isPulling, setIsPulling] = useState(false);
 
-    // Enhanced match handling
+    // Monitor network status
+    useEffect(() => {
+        const handleOnline = () => setNetworkStatus(true);
+        const handleOffline = () => setNetworkStatus(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    // Enhanced match handling with error recovery
     const handleMatch = useCallback((matchData) => {
         setMatchedUser(matchData.user);
         setShowMatch(true);
@@ -75,7 +91,7 @@ const SwipeToMatch = () => {
         });
     }, [dispatch]);
 
-    // Enhanced image preloading with priority queue
+    // Enhanced image preloading with error recovery and progressive loading
     const preloadImages = useCallback((users) => {
         const priorityQueue = users.slice(0, 3); // Immediate preload for next 3 cards
         const backgroundQueue = users.slice(3); // Background preload for rest
@@ -188,8 +204,14 @@ const SwipeToMatch = () => {
         });
     }, [swipeHistory]);
 
-    // Optimized match loading with request debouncing and caching
+    // Optimized match loading with enhanced error handling and retry logic
     const loadPotentialMatches = useCallback(async (resetList = false, isRefresh = false) => {
+        if (!networkStatus) {
+            setError('No internet connection. Please check your network.');
+            return;
+        }
+
+        setLoadingState('loading');
         // Cancel any pending requests
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -215,9 +237,10 @@ const SwipeToMatch = () => {
                 setLastSwipeDirection(null);
             }
 
-            // Calculate current page and batch size
+            // Enhanced pagination with optimized batch size
             const currentPage = resetList || isRefresh ? 1 : page;
-            const batchSize = resetList ? BATCH_SIZE * 2 : BATCH_SIZE;
+            const batchSize = resetList ? BATCH_SIZE * 2 : 
+                             networkStatus === 'slow' ? Math.floor(BATCH_SIZE / 2) : BATCH_SIZE;
 
             // Fetch matches with optimized parameters
             const response = await users.getPotentialMatches(
@@ -232,7 +255,8 @@ const SwipeToMatch = () => {
             );
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
@@ -275,11 +299,24 @@ const SwipeToMatch = () => {
             if (err.name === 'AbortError') return;
 
             console.error('Error loading matches:', err);
+            setLoadingState('error');
             
-            // Implement exponential backoff for retries
+            // Enhanced error handling with network awareness
+            if (!networkStatus) {
+                setError('Network connection lost. Reconnecting...');
+                return;
+            }
+
+            // Implement exponential backoff with jitter for retries
             if (retryCount < MAX_RETRIES) {
-                const delay = Math.min(RETRY_DELAY * Math.pow(2, retryCount), 10000);
-                toast.error('Loading matches failed. Retrying...', { duration: delay });
+                const baseDelay = RETRY_DELAY * Math.pow(2, retryCount);
+                const jitter = Math.random() * 1000; // Add randomness to prevent thundering herd
+                const delay = Math.min(baseDelay + jitter, 10000);
+                
+                toast.error(
+                    `Loading matches failed. Retrying in ${Math.ceil(delay/1000)}s...`, 
+                    { duration: delay }
+                );
                 
                 setTimeout(() => {
                     setRetryCount(prev => prev + 1);
@@ -287,11 +324,21 @@ const SwipeToMatch = () => {
                 }, delay);
             } else {
                 setError('Unable to load matches. Please try again later.');
-                toast.error('Failed to load matches after multiple attempts');
+                toast.error('Failed to load matches after multiple attempts', {
+                    action: {
+                        label: 'Retry',
+                        onClick: () => {
+                            setRetryCount(0);
+                            setError(null);
+                            loadPotentialMatches(true);
+                        }
+                    }
+                });
             }
         } finally {
             clearTimeout(loadingTimeoutRef.current);
             setIsLoading(false);
+            setLoadingState('idle');
         }
     }, [page, filters, potentialMatches, retryCount, lastSwipeDirection, preloadImages]);
 
@@ -437,65 +484,91 @@ const SwipeToMatch = () => {
         setShowFilters(prev => !prev);
     }, []);
 
-    // Render loading state
-    if (isLoading && potentialMatches.length === 0) {
-        return (
-            <div className="min-h-[80vh] flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-                    <p className="mt-4 text-gray-600 dark:text-gray-400">Finding your perfect travel buddy...</p>
+    // Enhanced loading state with network status
+    const renderLoadingState = () => {
+        if (loadingState === 'loading' && potentialMatches.length === 0) {
+            return (
+                <div className="min-h-[80vh] flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                        <p className="mt-4 text-gray-600 dark:text-gray-400">
+                            {networkStatus ? 'Finding your perfect travel buddy...' : 'Connecting...'}
+                        </p>
+                        {!networkStatus && (
+                            <p className="mt-2 text-sm text-red-500">
+                                Please check your internet connection
+                            </p>
+                        )}
+                    </div>
                 </div>
-            </div>
-        );
-    }
+            );
+        }
+        return null;
+    };
 
-    // Render error state
-    if (error) {
-        return (
-            <div className="min-h-[80vh] flex items-center justify-center">
-                <div className="text-center">
-                    <p className="text-red-500 mb-4">{error}</p>
-                    <button
-                        onClick={() => loadPotentialMatches(true)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                        Try Again
-                    </button>
+    // Enhanced error state with retry functionality
+    const renderErrorState = () => {
+        if (loadingState === 'error' || error) {
+            return (
+                <div className="min-h-[80vh] flex items-center justify-center">
+                    <div className="text-center">
+                        <p className="text-red-500 mb-4">{error}</p>
+                        <button
+                            onClick={() => {
+                                setRetryCount(0);
+                                setError(null);
+                                setLoadingState('loading');
+                                loadPotentialMatches(true);
+                            }}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                            Try Again
+                        </button>
+                        {!networkStatus && (
+                            <p className="mt-4 text-sm text-gray-500">
+                                Waiting for network connection...
+                            </p>
+                        )}
+                    </div>
                 </div>
-            </div>
-        );
-    }
-
-    // Render empty state
-    if (potentialMatches.length === 0) {
-        return (
-            <div className="min-h-[80vh] flex items-center justify-center">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                        No More Matches
-                    </h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-6">
-                        We've run out of potential matches for now. Check back later or adjust your filters!
-                    </p>
-                    <button
-                        onClick={() => loadPotentialMatches(true)}
-                        className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                        Refresh Matches
-                    </button>
-                </div>
-            </div>
-        );
-    }
+            );
+        }
+        return null;
+    };
 
     return (
-        <div 
-            ref={containerRef}
-            className="min-h-[80vh] relative overflow-hidden"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-        >
+        <>
+            {renderLoadingState()}
+            {renderErrorState()}
+            {!error && !isLoading && potentialMatches.length === 0 ? (
+                <div className="min-h-[80vh] flex items-center justify-center">
+                    <div className="text-center">
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                            No More Matches
+                        </h2>
+                        <p className="text-gray-600 dark:text-gray-400 mb-6">
+                            We've run out of potential matches for now. Check back later or adjust your filters!
+                        </p>
+                        <button
+                            onClick={() => {
+                                setLoadingState('loading');
+                                loadPotentialMatches(true);
+                            }}
+                            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                            disabled={!networkStatus}
+                        >
+                            {networkStatus ? 'Refresh Matches' : 'Waiting for Connection...'}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div 
+                    ref={containerRef}
+                    className="min-h-[80vh] relative overflow-hidden"
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                >
             {/* Pull to Refresh Indicator */}
             {isPulling && (
                 <motion.div 

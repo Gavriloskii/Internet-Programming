@@ -23,10 +23,7 @@ const Layout = () => {
     useEffect(() => {
         // Connect socket when authenticated
         if (isAuthenticated) {
-            const token = localStorage.getItem('token');
-            if (token) {
-                socketService.connect(token);
-            }
+            socketService.connect();
         }
 
         // Cleanup socket connection on unmount

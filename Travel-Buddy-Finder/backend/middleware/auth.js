@@ -17,35 +17,58 @@ exports.protect = async (req, res, next) => {
             token = req.headers.authorization.split(' ')[1];
         }
 
+        // For development, allow test token
+        if (process.env.NODE_ENV === 'development' && req.headers['x-test-auth']) {
+            token = req.headers['x-test-auth'];
+        }
+
         if (!token) {
-            throw new AppError('You are not logged in. Please log in to get access.', 401);
+            return res.status(401).json({
+                status: 'error',
+                message: 'You are not logged in. Please log in to get access.'
+            });
         }
 
-        // 2) Verify token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        try {
+            // 2) Verify token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // 3) Check if user still exists
-        const user = await User.findById(decoded.id).select('+active');
-        if (!user) {
-            throw new AppError('The user belonging to this token no longer exists.', 401);
+            // 3) Check if user still exists
+            const user = await User.findById(decoded.id).select('+active');
+            if (!user) {
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'The user belonging to this token no longer exists.'
+                });
+            }
+
+            // 4) Check if user is active
+            if (!user.active) {
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'This user account has been deactivated.'
+                });
+            }
+
+            // 5) Grant access to protected route
+            req.user = user;
+            next();
+        } catch (err) {
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Invalid token. Please log in again.'
+                });
+            } else if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Your token has expired. Please log in again.'
+                });
+            }
+            throw err;
         }
-
-        // 4) Check if user is active
-        if (!user.active) {
-            throw new AppError('This user account has been deactivated.', 401);
-        }
-
-        // 5) Grant access to protected route
-        req.user = user;
-        next();
     } catch (error) {
-        if (error.name === 'JsonWebTokenError') {
-            next(new AppError('Invalid token. Please log in again.', 401));
-        } else if (error.name === 'TokenExpiredError') {
-            next(new AppError('Your token has expired. Please log in again.', 401));
-        } else {
-            next(error);
-        }
+        next(error);
     }
 };
 

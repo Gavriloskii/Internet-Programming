@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { Provider } from 'react-redux';
+import { Provider, useSelector } from 'react-redux';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
+import { selectIsAuthenticated, selectLoading } from './redux/userSlice';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -24,10 +25,21 @@ import GroupChat from './components/GroupChat';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    const isAuthenticated = useSelector(selectIsAuthenticated);
+    const loading = useSelector(selectLoading);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
+
     return children;
 };
 

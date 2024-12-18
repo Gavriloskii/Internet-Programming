@@ -26,7 +26,8 @@ const createSendToken = (user, statusCode, res) => {
         ),
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
+        sameSite: 'strict',
+        path: '/'
     });
 
     res.status(statusCode).json({
@@ -84,13 +85,14 @@ router.post('/signup', async (req, res, next) => {
         { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
-    // Set cookie options
-    const cookieOptions = {
-        expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
-    };
+        // Set cookie options
+        const cookieOptions = {
+            expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/'
+        };
 
     // Send cookie
     res.cookie('jwt', token, cookieOptions);
@@ -143,7 +145,8 @@ router.post('/login', authLimiter, async (req, res, next) => {
             expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax'
+            sameSite: 'strict',
+            path: '/'
         };
 
         // Send cookie
