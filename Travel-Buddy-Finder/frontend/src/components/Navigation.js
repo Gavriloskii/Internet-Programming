@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { motion, AnimatePresence } from 'framer-motion';
+import { selectNotifications, selectHasUnread, markAsRead, markAllAsRead } from '../redux/notificationsSlice';
+import { selectTotalUnreadCount } from '../redux/chatSlice';
 import {
     HomeIcon,
     UserIcon,
@@ -34,6 +36,9 @@ const Navigation = () => {
     const user = useSelector(selectUser);
     const [showNotifications, setShowNotifications] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
+    const notifications = useSelector(selectNotifications);
+    const hasUnread = useSelector(selectHasUnread);
+    const unreadMessageCount = useSelector(selectTotalUnreadCount);
 
     const navigationItems = [
         {
@@ -53,7 +58,7 @@ const Navigation = () => {
             label: 'Messages',
             icon: ChatBubbleLeftRightIcon,
             activeIcon: ChatIconSolid,
-            badge: 3, // Replace with actual unread count
+            badge: unreadMessageCount,
         },
         {
             path: '/app/marketplace',
@@ -97,23 +102,35 @@ const Navigation = () => {
         }
     };
 
-    const notifications = [
-        {
-            id: 1,
-            type: 'match',
-            content: 'You have a new match with Sarah!',
-            time: '5m ago',
-            unread: true,
-        },
-        {
-            id: 2,
-            type: 'message',
-            content: 'John sent you a message',
-            time: '1h ago',
-            unread: true,
-        },
-        // Add more notifications
-    ];
+    const handleNotificationClick = (notification) => {
+        dispatch(markAsRead(notification.id));
+        
+        // Navigate based on notification type
+        switch (notification.type) {
+            case 'match':
+                // Close notifications dropdown
+                setShowNotifications(false);
+                // Navigate to the new match's conversation
+                if (notification.data?.conversation) {
+                    navigate(`/app/messages/${notification.data.conversation.id}`);
+                }
+                break;
+            case 'message':
+                // Close notifications dropdown
+                setShowNotifications(false);
+                // Navigate to the conversation
+                if (notification.data?.conversationId) {
+                    navigate(`/app/messages/${notification.data.conversationId}`);
+                }
+                break;
+            default:
+                break;
+        }
+    };
+
+    const handleMarkAllAsRead = () => {
+        dispatch(markAllAsRead());
+    };
 
     return (
         <>
@@ -138,7 +155,7 @@ const Navigation = () => {
                                     className="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white relative"
                                 >
                                     <BellIcon className="h-6 w-6" />
-                                    {notifications.some(n => n.unread) && (
+                                    {hasUnread && (
                                         <span className="absolute top-0 right-0 block h-2 w-2 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-800" />
                                     )}
                                 </button>
@@ -151,16 +168,25 @@ const Navigation = () => {
                                             exit={{ opacity: 0, y: 10 }}
                                             className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg py-2 ring-1 ring-black ring-opacity-5"
                                         >
-                                            <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                            <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                                                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                                                     Notifications
                                                 </h3>
+                                                {hasUnread && (
+                                                    <button
+                                                        onClick={handleMarkAllAsRead}
+                                                        className="text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    >
+                                                        Mark all as read
+                                                    </button>
+                                                )}
                                             </div>
                                             <div className="max-h-96 overflow-y-auto">
                                                 {notifications.map((notification) => (
                                                     <div
                                                         key={notification.id}
-                                                        className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 ${
+                                                        onClick={() => handleNotificationClick(notification)}
+                                                        className={`px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer ${
                                                             notification.unread ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                                                         }`}
                                                     >
@@ -242,7 +268,7 @@ const Navigation = () => {
                             >
                                 <div className="relative">
                                     <Icon className="h-6 w-6" />
-                                    {item.badge && (
+                                    {item.badge > 0 && (
                                         <span className="absolute -top-1 -right-1 h-4 w-4 text-xs flex items-center justify-center bg-red-500 text-white rounded-full">
                                             {item.badge}
                                         </span>
@@ -272,7 +298,7 @@ const Navigation = () => {
                             >
                                 <div className="relative">
                                     <Icon className="h-6 w-6 mr-3" />
-                                    {item.badge && (
+                                    {item.badge > 0 && (
                                         <span className="absolute -top-1 -right-1 h-4 w-4 text-xs flex items-center justify-center bg-red-500 text-white rounded-full">
                                             {item.badge}
                                         </span>

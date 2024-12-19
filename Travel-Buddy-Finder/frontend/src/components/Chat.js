@@ -19,7 +19,8 @@ import {
     sendMessage,
     setTypingStatus,
     selectMessages,
-    selectTypingStatus
+    selectTypingStatus,
+    markConversationAsRead
 } from '../redux/chatSlice';
 
 const Chat = () => {
@@ -41,6 +42,7 @@ const Chat = () => {
 
     useEffect(() => {
         dispatch(fetchMessages(conversationId));
+        dispatch(markConversationAsRead(conversationId));
         socketService.on('messageStatus', handleMessageStatus);
         
         return () => {

@@ -66,7 +66,7 @@ matchSchema.virtual('matchAge').get(function() {
 });
 
 // Enhanced method to calculate match score with ML-based compatibility
-matchSchema.methods.calculateMatchScore = function(user1Preferences, user2Preferences) {
+matchSchema.methods.calculateMatchScore = function(user1Preferences = {}, user2Preferences = {}) {
     let score = 0;
     const weights = {
         budget: 0.20,
@@ -76,6 +76,11 @@ matchSchema.methods.calculateMatchScore = function(user1Preferences, user2Prefer
         personality: 0.15,
         interests: 0.15
     };
+
+    // Handle undefined preferences
+    if (!user1Preferences || !user2Preferences) {
+        return 50; // Return default score if preferences are missing
+    }
 
     // Enhanced budget compatibility with progressive scaling
     const budgetMap = { 'budget': 1, 'moderate': 2, 'luxury': 3 };

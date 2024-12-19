@@ -19,10 +19,10 @@ const app = express();
 
 // CORS configuration with credentials support
 app.use(cors({
-    origin: true, // Allow all origins in development
+    origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'x-test-auth'],
     exposedHeaders: ['Set-Cookie', 'Authorization'],
     maxAge: 86400
 }));

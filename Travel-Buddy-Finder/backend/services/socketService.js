@@ -117,51 +117,76 @@ class SocketService {
     }
 
     async handleSwipe(userId, targetUserId, direction) {
-        if (direction === 'left') {
-            await User.findByIdAndUpdate(userId, {
-                $addToSet: { rejectedMatches: targetUserId }
+        try {
+            if (direction === 'left') {
+                await User.findByIdAndUpdate(userId, {
+                    $addToSet: { rejectedMatches: targetUserId }
+                });
+                return { isMatch: false };
+            }
+
+            // Check if target user has already liked current user
+            const existingMatch = await Match.findOne({
+                users: { $all: [userId, targetUserId] }
             });
-            return { isMatch: false };
-        }
 
-        // Check if target user has already liked current user
-        const existingMatch = await Match.findOne({
-            users: { $all: [userId, targetUserId] }
-        });
+            if (existingMatch) {
+                return { isMatch: true, match: existingMatch };
+            }
 
-        if (existingMatch) {
-            return { isMatch: true, match: existingMatch };
-        }
+            // Create potential match
+            const [currentUser, targetUser] = await Promise.all([
+                User.findById(userId).select('travelPreferences personalityType'),
+                User.findById(targetUserId).select('travelPreferences personalityType likes')
+            ]);
 
-        // Create potential match
-        const [currentUser, targetUser] = await Promise.all([
-            User.findById(userId).select('travelPreferences'),
-            User.findById(targetUserId).select('travelPreferences likes')
-        ]);
+            if (!currentUser || !targetUser) {
+                throw new Error('User not found');
+            }
 
-        const newMatch = new Match({
-            users: [userId, targetUserId]
-        });
+            const newMatch = new Match({
+                users: [userId, targetUserId],
+                status: targetUser.likes.includes(userId) ? 'accepted' : 'pending'
+            });
 
-        // Calculate match score
-        const matchScore = newMatch.calculateMatchScore(
-            currentUser.travelPreferences,
-            targetUser.travelPreferences
-        );
+            // Calculate match score with error handling
+            try {
+                const matchScore = newMatch.calculateMatchScore(
+                    currentUser.travelPreferences,
+                    targetUser.travelPreferences
+                );
+                newMatch.matchScore = matchScore;
+            } catch (error) {
+                console.error('Error calculating match score:', error);
+                newMatch.matchScore = 50; // Default score on error
+            }
 
-        if (targetUser.likes.includes(userId)) {
-            // It's a match!
-            newMatch.status = 'accepted';
+            // Save the match
             await newMatch.save();
-            return { isMatch: true, match: newMatch };
+
+            // If target user already liked current user, it's a match
+            if (targetUser.likes.includes(userId)) {
+                return { 
+                    isMatch: true, 
+                    matchScore: newMatch.matchScore,
+                    match: newMatch
+                };
+            }
+
+            // Add to likes
+            await User.findByIdAndUpdate(userId, {
+                $addToSet: { likes: targetUserId }
+            });
+
+            return { 
+                isMatch: false, 
+                matchScore: newMatch.matchScore,
+                match: newMatch
+            };
+        } catch (error) {
+            console.error('Error in handleSwipe:', error);
+            throw error;
         }
-
-        // Add to likes
-        await User.findByIdAndUpdate(userId, {
-            $addToSet: { likes: targetUserId }
-        });
-
-        return { isMatch: false, matchScore };
     }
 
     notifyMatch(match) {

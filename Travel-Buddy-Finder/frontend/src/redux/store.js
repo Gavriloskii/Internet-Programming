@@ -2,12 +2,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import userReducer from './userSlice';
 import chatReducer from './chatSlice';
 import matchesReducer from './matchesSlice';
+import notificationsReducer from './notificationsSlice';
 
 export const store = configureStore({
   reducer: {
     user: userReducer,
     chat: chatReducer,
-    matches: matchesReducer
+    matches: matchesReducer,
+    notifications: notificationsReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -10,8 +10,10 @@ import {
 import {
     addMatch,
     updateMatch,
-    updateMatchStats
+    updateMatchStats,
+    handleNewMatch
 } from '../redux/matchesSlice';
+import { handleNewMessage } from '../redux/chatSlice';
 
 class SocketService {
     constructor() {
@@ -66,12 +68,13 @@ class SocketService {
         });
 
         // Chat events
-        this.socket.on('message', (message) => {
-            store.dispatch(addMessage({
-                conversationId: message.conversationId,
-                message
+        this.socket.on('message', (messageData) => {
+            store.dispatch(handleNewMessage({
+                conversationId: messageData.conversationId,
+                message: messageData,
+                sender: messageData.sender
             }));
-            this.acknowledgePendingMessage(message.id);
+            this.acknowledgePendingMessage(messageData.id);
         });
 
         this.socket.on('typing', ({ conversationId, userId, isTyping }) => {
@@ -84,7 +87,7 @@ class SocketService {
 
         // Match events
         this.socket.on('match', (match) => {
-            store.dispatch(addMatch(match));
+            store.dispatch(handleNewMatch(match));
             store.dispatch(addConversation(match.conversation));
         });
 

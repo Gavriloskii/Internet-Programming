@@ -39,6 +39,12 @@ const Signup = () => {
         setValidationError('');
         console.log('Form submitted with data:', formData);
 
+        // Basic field validation
+        if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
+            setValidationError('All fields are required');
+            return;
+        }
+
         // Enhanced validation
         if (formData.password !== formData.confirmPassword) {
             setValidationError('Passwords do not match');
@@ -84,6 +90,10 @@ const Signup = () => {
                 password: formData.password,
             })).unwrap();
             console.log('Signup result:', result);
+
+            if (!result) {
+                throw new Error('No response from server');
+            }
 
             // Show success message
             const successMessage = document.createElement('div');
@@ -189,6 +199,7 @@ const Signup = () => {
                                     required
                                     value={formData.name}
                                     onChange={handleChange}
+                                    placeholder="Enter your full name"
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
                                 />
                             </div>
@@ -210,6 +221,7 @@ const Signup = () => {
                                     required
                                     value={formData.email}
                                     onChange={handleChange}
+                                    placeholder="Enter your email address"
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
                                 />
                             </div>
@@ -231,6 +243,7 @@ const Signup = () => {
                                     required
                                     value={formData.password}
                                     onChange={handleChange}
+                                    placeholder="Enter your password"
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
                                 />
                             </div>
@@ -252,6 +265,7 @@ const Signup = () => {
                                     required
                                     value={formData.confirmPassword}
                                     onChange={handleChange}
+                                    placeholder="Confirm your password"
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
                                 />
                             </div>
