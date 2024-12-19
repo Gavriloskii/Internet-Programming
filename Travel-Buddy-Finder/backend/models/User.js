@@ -109,6 +109,14 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
+    loginAttempts: {
+        type: Number,
+        default: 0
+    },
+    lockUntil: {
+        type: Date,
+        default: undefined
+    },
     matches: [{
         type: mongoose.Schema.ObjectId,
         ref: 'User'

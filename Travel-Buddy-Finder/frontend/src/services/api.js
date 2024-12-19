@@ -7,29 +7,29 @@ const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
     },
     withCredentials: true,
     xsrfCookieName: 'XSRF-TOKEN',
-    xsrfHeaderName: 'X-XSRF-TOKEN'
-});
-
-// Add request interceptor to handle development mode
-api.interceptors.request.use(config => {
-    // Add test auth header in development
-    if (process.env.NODE_ENV === 'development') {
-        const testToken = localStorage.getItem('testToken');
-        if (testToken) {
-            config.headers['x-test-auth'] = testToken;
-        }
+    xsrfHeaderName: 'X-CSRF-Token',
+    credentials: 'include',
+    validateStatus: function (status) {
+        return status >= 200 && status < 500;
     }
-    return config;
 });
 
-// Add CSRF token to requests
+// Add request interceptor
 api.interceptors.request.use(
     (config) => {
-        // No need to add Authorization header since we're using httpOnly cookies
+        // Add timestamp to prevent caching
+        if (config.method === 'get') {
+            config.params = {
+                ...config.params,
+                _t: Date.now()
+            };
+        }
+        // The token will be automatically included in requests via httpOnly cookies
         return config;
     },
     (error) => {

@@ -11,30 +11,61 @@ const SocketService = require('./services/socketService');
 const authRoutes = require('./routes/auth');
 const { setupSecurity } = require('./middleware/security');
 const { errorHandler } = require('./middleware/errorHandler');
+const { protect } = require('./middleware/auth');
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 
+// Trust proxy for secure cookies
+app.set('trust proxy', 1);
+
 // CORS configuration with credentials support
-app.use(cors({
-    origin: true,
+const corsOptions = {
+    origin: process.env.NODE_ENV === 'production' 
+        ? process.env.FRONTEND_URL 
+        : 'http://localhost:3000',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'x-test-auth'],
-    exposedHeaders: ['Set-Cookie', 'Authorization'],
-    maxAge: 86400
-}));
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
+    exposedHeaders: ['set-cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
 
 // Enable pre-flight requests for all routes
-app.options('*', cors());
+app.options('*', cors(corsOptions));
 
-// Parse cookies and JSON body
-app.use(cookieParser());
+// Cookie parser middleware with signed cookies
+app.use(cookieParser(process.env.COOKIE_SECRET));
+
+// Body parsing middleware
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(compression());
+
+// Set default cookie options
+app.use((req, res, next) => {
+    res.cookie = res.cookie.bind(res);
+    const defaultCookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/',
+        signed: true,
+        domain: process.env.NODE_ENV === 'production' ? process.env.DOMAIN : 'localhost',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    };
+    
+    const originalCookie = res.cookie;
+    res.cookie = function(name, value, options = {}) {
+        return originalCookie.call(this, name, value, { ...defaultCookieOptions, ...options });
+    };
+    next();
+});
 
 // Setup security middleware
 setupSecurity(app);
@@ -78,10 +109,11 @@ const analyticsLimiter = rateLimit({
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/groups', groupsRoutes);
-app.use('/api/journals', journalsRoutes);
-app.use('/api/matches', matchesRoutes);
-app.use('/api/analytics', analyticsLimiter, analyticsRoutes);
+// Protected routes
+app.use('/api/groups', protect, groupsRoutes);
+app.use('/api/journals', protect, journalsRoutes);
+app.use('/api/matches', protect, matchesRoutes);
+app.use('/api/analytics', protect, analyticsLimiter, analyticsRoutes);
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static('uploads'));

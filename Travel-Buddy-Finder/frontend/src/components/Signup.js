@@ -37,7 +37,8 @@ const Signup = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setValidationError('');
-        console.log('Form submitted with data:', formData);
+        // Remove sensitive data logging
+        console.log('Attempting signup...');
 
         // Basic field validation
         if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
@@ -95,26 +96,16 @@ const Signup = () => {
                 throw new Error('No response from server');
             }
 
-            // Show success message
+            // Show success message and navigate
             const successMessage = document.createElement('div');
-            successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50 transition-all duration-300 ease-in-out opacity-0 transform translate-y-[-10px]';
+            successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
             successMessage.textContent = 'Account created successfully!';
             document.body.appendChild(successMessage);
 
-            // Trigger fade in
+            // Clean up and navigate
             setTimeout(() => {
-                successMessage.style.opacity = '1';
-                successMessage.style.transform = 'translateY(0)';
-            }, 10);
-
-            // Trigger fade out and navigate
-            setTimeout(() => {
-                successMessage.style.opacity = '0';
-                successMessage.style.transform = 'translateY(-10px)';
-                setTimeout(() => {
-                    successMessage.remove();
-                    navigate('/app/quiz');
-                }, 300);
+                successMessage.remove();
+                navigate('/app/quiz');
             }, 2000);
 
         } catch (err) {

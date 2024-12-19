@@ -19,22 +19,46 @@ const authLimiter = rateLimit({
 
 // Security middleware setup
 const setupSecurity = (app) => {
-    // Basic security headers with development-friendly CSP
+    // Helmet configuration with CSP
     app.use(helmet({
-        contentSecurityPolicy: false,
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+                styleSrc: ["'self'", "'unsafe-inline'", 'https:'],
+                imgSrc: ["'self'", 'data:', 'https:'],
+                connectSrc: ["'self'", 'ws:', 'wss:', 'http://localhost:*', 'https:'],
+                fontSrc: ["'self'", 'https:', 'data:'],
+                objectSrc: ["'none'"],
+                mediaSrc: ["'self'"],
+                frameSrc: ["'self'"],
+            },
+        },
         crossOriginEmbedderPolicy: false,
-        crossOriginResourcePolicy: { policy: "cross-origin" }
+        crossOriginResourcePolicy: { policy: "cross-origin" },
+        crossOriginOpenerPolicy: { policy: "same-origin" }
     }));
 
     // Data sanitization against NoSQL query injection
     app.use(mongoSanitize());
 
-    // Enhanced security headers
+    // CORS configuration
     app.use((req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'http://localhost:3000');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        
         // Basic security headers
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('X-Frame-Options', 'SAMEORIGIN');
         res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+        
+        // Handle preflight requests
+        if (req.method === 'OPTIONS') {
+            return res.status(200).end();
+        }
         
         next();
     });

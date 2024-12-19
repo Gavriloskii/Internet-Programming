@@ -43,27 +43,53 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLocalError('');
-        console.log('Attempting login with:', { email }); // Don't log password
+
+        // Get failed attempts from sessionStorage (more secure than localStorage)
+        const failedAttempts = parseInt(sessionStorage.getItem('failedLoginAttempts') || '0');
+        if (failedAttempts >= 5) {
+            const lastAttemptTime = parseInt(sessionStorage.getItem('lastLoginAttempt') || '0');
+            const cooldownPeriod = 5 * 60 * 1000; // 5 minutes in milliseconds
+            
+            if (Date.now() - lastAttemptTime < cooldownPeriod) {
+                const remainingTime = Math.ceil((cooldownPeriod - (Date.now() - lastAttemptTime)) / 60000);
+                setLocalError(`Too many failed attempts. Please try again in ${remainingTime} minutes.`);
+                return;
+            } else {
+                // Reset after cooldown period
+                sessionStorage.setItem('failedLoginAttempts', '0');
+                sessionStorage.setItem('lastLoginAttempt', '0');
+            }
+        }
 
         try {
             const resultAction = await dispatch(loginUser({ email, password }));
-            console.log('Login result:', resultAction);
             
             if (loginUser.fulfilled.match(resultAction)) {
-                console.log('Login successful, navigating to /app/swipe');
-                navigate('/app/swipe');
+                // Reset failed attempts on successful login
+                sessionStorage.setItem('failedLoginAttempts', '0');
+                sessionStorage.setItem('lastLoginAttempt', '0');
+
+                // Show success message and navigate
+                const successMessage = document.createElement('div');
+                successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
+                successMessage.textContent = 'Login successful!';
+                document.body.appendChild(successMessage);
+
+                // Clean up and navigate
+                setTimeout(() => {
+                    successMessage.remove();
+                    navigate('/app/swipe');
+                }, 1500);
             } else if (loginUser.rejected.match(resultAction)) {
-                console.error('Login failed:', resultAction.error);
-                // Track failed login attempts for rate limiting
-                const failedAttempts = parseInt(localStorage.getItem('failedLoginAttempts') || '0');
-                localStorage.setItem('failedLoginAttempts', (failedAttempts + 1).toString());
-                
-                // If too many failed attempts, show cooldown message
-                if (failedAttempts >= 4) {
-                    setLocalError('Too many failed attempts. Please try again in a few minutes.');
-                    setTimeout(() => {
-                        localStorage.setItem('failedLoginAttempts', '0');
-                    }, 300000); // 5 minutes cooldown
+                // Increment failed attempts
+                const newFailedAttempts = failedAttempts + 1;
+                sessionStorage.setItem('failedLoginAttempts', newFailedAttempts.toString());
+                sessionStorage.setItem('lastLoginAttempt', Date.now().toString());
+
+                if (newFailedAttempts >= 5) {
+                    setLocalError('Too many failed attempts. Please try again in 5 minutes.');
+                } else {
+                    setLocalError(`Invalid credentials. ${5 - newFailedAttempts} attempts remaining.`);
                 }
             }
         } catch (err) {
