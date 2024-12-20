@@ -25,11 +25,8 @@ const Layout = () => {
         if (isAuthenticated) {
             socketService.connect();
         }
-
-        // Cleanup socket connection on unmount
-        return () => {
-            socketService.disconnect();
-        };
+        // Don't disconnect on unmount as other components might need the socket
+        // Only disconnect when user logs out
     }, [isAuthenticated]);
 
     // Loading states

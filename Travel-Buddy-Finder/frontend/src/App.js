@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Provider, useSelector } from 'react-redux';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
 import { selectIsAuthenticated, selectLoading } from './redux/userSlice';
 
@@ -66,14 +66,11 @@ const App = () => {
 
     return (
         <Provider store={store}>
-            <Router>
+            <BrowserRouter>
                 <Routes>
-                    {/* Public Routes */}
                     <Route path="/" element={<HomePage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
-
-                    {/* Protected Routes */}
                     <Route
                         path="/app"
                         element={
@@ -96,8 +93,6 @@ const App = () => {
                         <Route path="forum" element={<ForumPage />} />
                         <Route path="itinerary" element={<ItineraryPage />} />
                     </Route>
-
-                    {/* 404 Route */}
                     <Route
                         path="*"
                         element={
@@ -123,7 +118,7 @@ const App = () => {
                         }
                     />
                 </Routes>
-            </Router>
+            </BrowserRouter>
         </Provider>
     );
 };

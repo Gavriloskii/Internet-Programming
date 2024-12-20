@@ -1,5 +1,7 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
+const cookie = require('cookie');
+const cookieParser = require('cookie-parser');
 const Match = require('../models/Match');
 const User = require('../models/User');
 
@@ -15,7 +17,9 @@ class SocketService {
     initialize(server) {
         this.io = socketIo(server, {
             cors: {
-                origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+                origin: process.env.NODE_ENV === 'production' 
+                    ? process.env.FRONTEND_URL 
+                    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
                 methods: ['GET', 'POST'],
                 credentials: true,
                 allowedHeaders: ['Cookie', 'cookie', 'authorization']
@@ -25,8 +29,9 @@ class SocketService {
             cookie: {
                 name: 'jwt',
                 httpOnly: true,
-                sameSite: 'strict',
-                secure: process.env.NODE_ENV === 'production'
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+                path: '/'
             }
         });
 
@@ -38,17 +43,16 @@ class SocketService {
 
     async authenticateSocket(socket, next) {
         try {
-            // Get token from cookie
-            const cookies = socket.handshake.headers.cookie?.split(';').reduce((acc, cookie) => {
-                const [key, value] = cookie.trim().split('=');
-                acc[key] = value;
-                return acc;
-            }, {});
+            const cookieHeader = socket.handshake.headers.cookie;
+            if (!cookieHeader) {
+                return next(new Error('Authentication error: No cookies found'));
+            }
 
-            const token = cookies?.jwt;
+            const cookies = cookie.parse(cookieHeader);
+            const signedCookies = cookieParser.signedCookies(cookies, process.env.COOKIE_SECRET);
+            const token = signedCookies.jwt;
 
             if (!token) {
-                console.error('No token found in cookies:', cookies);
                 return next(new Error('Authentication error: No token found'));
             }
 
@@ -57,15 +61,13 @@ class SocketService {
                 const user = await User.findById(decoded.id).select('_id name');
                 
                 if (!user) {
-                    console.error('User not found for token:', decoded);
                     return next(new Error('User not found'));
                 }
 
                 socket.user = user;
-                console.log('Socket authenticated for user:', user._id);
                 next();
             } catch (jwtError) {
-                console.error('JWT verification error:', jwtError, 'Token:', token);
+                console.error('JWT verification error:', jwtError);
                 return next(new Error('Invalid token'));
             }
         } catch (error) {
@@ -125,7 +127,6 @@ class SocketService {
                 return { isMatch: false };
             }
 
-            // Check if target user has already liked current user
             const existingMatch = await Match.findOne({
                 users: { $all: [userId, targetUserId] }
             });
@@ -134,7 +135,6 @@ class SocketService {
                 return { isMatch: true, match: existingMatch };
             }
 
-            // Create potential match
             const [currentUser, targetUser] = await Promise.all([
                 User.findById(userId).select('travelPreferences personalityType'),
                 User.findById(targetUserId).select('travelPreferences personalityType likes')
@@ -149,7 +149,6 @@ class SocketService {
                 status: targetUser.likes.includes(userId) ? 'accepted' : 'pending'
             });
 
-            // Calculate match score with error handling
             try {
                 const matchScore = newMatch.calculateMatchScore(
                     currentUser.travelPreferences,
@@ -158,13 +157,11 @@ class SocketService {
                 newMatch.matchScore = matchScore;
             } catch (error) {
                 console.error('Error calculating match score:', error);
-                newMatch.matchScore = 50; // Default score on error
+                newMatch.matchScore = 50;
             }
 
-            // Save the match
             await newMatch.save();
 
-            // If target user already liked current user, it's a match
             if (targetUser.likes.includes(userId)) {
                 return { 
                     isMatch: true, 
@@ -173,7 +170,6 @@ class SocketService {
                 };
             }
 
-            // Add to likes
             await User.findByIdAndUpdate(userId, {
                 $addToSet: { likes: targetUserId }
             });
@@ -219,7 +215,6 @@ class SocketService {
 
             if (!this.connections.has(userId)) {
                 this.reconnectAttempts.set(userId, attempts);
-                // Attempt to reconnect logic here
                 console.log(`Attempting to reconnect user ${userId}, attempt ${attempts}`);
             }
         } catch (error) {
@@ -240,7 +235,6 @@ class SocketService {
         this.handleDisconnect(userId);
     }
 
-    // Utility method to broadcast to all connected users
     broadcast(event, data, excludeUser = null) {
         this.connections.forEach((socket, userId) => {
             if (userId !== excludeUser) {
@@ -249,12 +243,10 @@ class SocketService {
         });
     }
 
-    // Method to get active connections count
     getActiveConnectionsCount() {
         return this.connections.size;
     }
 
-    // Method to check if a user is connected
     isUserConnected(userId) {
         return this.connections.has(userId.toString());
     }

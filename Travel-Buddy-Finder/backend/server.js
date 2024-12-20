@@ -25,11 +25,11 @@ app.set('trust proxy', 1);
 const corsOptions = {
     origin: process.env.NODE_ENV === 'production' 
         ? process.env.FRONTEND_URL 
-        : 'http://localhost:3000',
+        : ['http://localhost:3000', 'http://127.0.0.1:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With'],
-    exposedHeaders: ['set-cookie'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'Cookie'],
+    exposedHeaders: ['Set-Cookie'],
     preflightContinue: false,
     optionsSuccessStatus: 204
 };
@@ -56,7 +56,10 @@ app.use((req, res, next) => {
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
         path: '/',
         signed: true,
-        domain: process.env.NODE_ENV === 'production' ? process.env.DOMAIN : 'localhost',
+        // Remove domain setting in development
+        ...(process.env.NODE_ENV === 'production' && {
+            domain: process.env.DOMAIN
+        }),
         maxAge: 24 * 60 * 60 * 1000 // 24 hours
     };
     

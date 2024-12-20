@@ -7,9 +7,9 @@ exports.protect = async (req, res, next) => {
     try {
         let token;
 
-        // 1) Get token from cookie or Authorization header
-        if (req.cookies.jwt) {
-            token = req.cookies.jwt;
+        // 1) Get token from signed cookie or Authorization header
+        if (req.signedCookies && req.signedCookies.jwt) {
+            token = req.signedCookies.jwt;
         } else if (
             req.headers.authorization &&
             req.headers.authorization.startsWith('Bearer')

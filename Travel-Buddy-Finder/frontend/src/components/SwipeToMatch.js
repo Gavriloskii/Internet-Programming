@@ -21,6 +21,7 @@ const SwipeToMatch = () => {
     const containerRef = useRef(null);
     const abortControllerRef = useRef(null);
     const loadingTimeoutRef = useRef(null);
+    const activeAnimationsRef = useRef(new Set());
 
     const [showFilters, setShowFilters] = useState(false);
     const [potentialMatches, setPotentialMatches] = useState([]);
@@ -356,77 +357,215 @@ const SwipeToMatch = () => {
         setIsPulling(false);
     }, [isPulling, pullMoveY, isRefreshing, isLoading, loadPotentialMatches]);
 
-    // Initialize matches and socket connection
+    // Cleanup animations when component unmounts or filters change
     useEffect(() => {
-        loadPotentialMatches();
+        return () => {
+            // Clear any active animations
+            activeAnimationsRef.current.forEach(animationId => {
+                const [userId] = animationId.split('-');
+                const cardElement = document.querySelector(`[data-user-id="${userId}"]`);
+                if (cardElement) {
+                    cardElement.style.transform = '';
+                    cardElement.style.transition = 'none';
+                }
+            });
+            activeAnimationsRef.current.clear();
+        };
+    }, [filters]); // Cleanup when filters change
 
+    // Initialize matches and socket event listeners
+    useEffect(() => {
+        let isMounted = true;
+        let retryTimeout;
+
+        const initializeMatches = async () => {
+            if (!isMounted) return;
+            
+            try {
+                setIsLoading(true);
+                setError(null);
+
+                const response = await users.getPotentialMatches(1, {
+                    limit: 10,
+                    includeDetails: true
+                });
+
+                if (!isMounted) return;
+
+                if (!response?.data) {
+                    throw new Error('Invalid response format');
+                }
+
+                setPotentialMatches(response.data.data || []);
+                setHasMore((response.data.data || []).length >= 10);
+                setLoadingState('success');
+            } catch (error) {
+                if (!isMounted) return;
+                console.error('Failed to initialize matches:', error);
+                setError('Unable to load matches. Please check your profile settings and try again.');
+                setLoadingState('error');
+                toast.error('Failed to load matches. Please ensure your profile is complete.');
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        // Set up socket event listeners only
         socketService.on('match', handleMatch);
         socketService.on('error', (error) => {
             console.error('Socket error:', error);
-            toast.error('Connection error. Trying to reconnect...');
+            if (isMounted) {
+                toast.error('Connection error. Please refresh the page.');
+            }
         });
 
+        // Initialize matches
+        initializeMatches();
+
         return () => {
+            isMounted = false;
+            clearTimeout(retryTimeout);
             socketService.off('match', handleMatch);
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
         };
-    }, [handleMatch, loadPotentialMatches]);
+    }, []); // Empty dependency array since we only want this to run once
 
     // Load more matches when running low
     useEffect(() => {
-        if (!isLoading && hasMore && potentialMatches.length - currentIndex <= PRELOAD_THRESHOLD) {
-            setPage(prev => prev + 1);
-            loadPotentialMatches();
-        }
-    }, [currentIndex, potentialMatches.length, isLoading, hasMore, loadPotentialMatches]);
+        let isMounted = true;
+        let loadMoreTimeout;
+
+        const loadMore = async () => {
+            if (!isLoading && !error && hasMore && potentialMatches.length > 0 && 
+                potentialMatches.length - currentIndex <= PRELOAD_THRESHOLD) {
+                try {
+                    const nextPage = Math.floor(potentialMatches.length / 10) + 1;
+                    const response = await users.getPotentialMatches(nextPage, {
+                        limit: 10,
+                        includeDetails: false
+                    });
+
+                    if (!isMounted || !response?.data) return;
+
+                    const newMatches = response.data.data || [];
+                    if (newMatches.length > 0) {
+                        setPotentialMatches(prev => {
+                            // Filter out duplicates
+                            const existingIds = new Set(prev.map(m => m._id));
+                            const uniqueNewMatches = newMatches.filter(m => !existingIds.has(m._id));
+                            return [...prev, ...uniqueNewMatches];
+                        });
+                        setHasMore(newMatches.length >= 10);
+                    } else {
+                        setHasMore(false);
+                    }
+                } catch (error) {
+                    console.error('Error loading more matches:', error);
+                    // Don't show error toast for loading more, just stop loading
+                    setHasMore(false);
+                }
+            }
+        };
+
+        loadMoreTimeout = setTimeout(loadMore, 500); // Increased debounce time
+
+        return () => {
+            isMounted = false;
+            clearTimeout(loadMoreTimeout);
+        };
+    }, [currentIndex, potentialMatches.length, isLoading, hasMore, error]);
 
     // Handle swipe
     const handleSwipe = useCallback(async (direction) => {
         const potentialMatch = potentialMatches[currentIndex];
         if (!potentialMatch) return;
 
+        let swipePromise = null;
+        const swipeTimestamp = Date.now();
+        const animationId = `${potentialMatch._id}-${direction}-${swipeTimestamp}`;
+        activeAnimationsRef.current.add(animationId);
+
         try {
             setIsLoading(true);
             setLastSwipeDirection(direction);
             
-            setCurrentIndex(prev => prev + 1);
-            setSwipeHistory(prev => [...prev, { user: potentialMatch, direction }]);
-            setLastSwipeTimestamp(Date.now());
-
+            // Track analytics before any state updates
             analytics.track('Swipe Action', {
                 direction,
                 userId: potentialMatch._id,
                 matchScore: potentialMatch.matchScore,
-                swipeSpeed: Date.now() - lastSwipeTimestamp
+                swipeSpeed: swipeTimestamp - lastSwipeTimestamp
             });
 
+            // If it's a right swipe, initiate socket connection first
             if (direction === 'right') {
-                const swipePromise = socketService.swipe(potentialMatch._id, direction);
-                
+                try {
+                    swipePromise = socketService.swipe(potentialMatch._id, direction);
+                } catch (socketError) {
+                    console.error('Socket initialization error:', socketError);
+                    toast.error('Connection error. Please refresh the page.');
+                    return;
+                }
+            }
+
+            // Update state after socket initialization
+            setCurrentIndex(prev => prev + 1);
+            setSwipeHistory(prev => [...prev, { user: potentialMatch, direction }]);
+            setLastSwipeTimestamp(swipeTimestamp);
+
+            // Handle right swipe match processing
+            if (direction === 'right' && swipePromise) {
                 setMatchQueue(prev => [...prev, {
                     user: potentialMatch,
                     promise: swipePromise
                 }]);
 
-                processMatchQueue();
+                try {
+                    await processMatchQueue();
+                } catch (matchError) {
+                    console.error('Match processing error:', matchError);
+                    // Don't show error for match processing failures
+                }
             }
 
+            // Load more matches if needed
             if (currentIndex >= potentialMatches.length - PRELOAD_THRESHOLD && hasMore) {
-                setPage(prev => prev + 1);
+                const nextPage = Math.floor(potentialMatches.length / 10) + 1;
+                try {
+                    const response = await users.getPotentialMatches(nextPage, {
+                        limit: 10,
+                        includeDetails: false
+                    });
+
+                    if (response?.data?.data) {
+                        setPotentialMatches(prev => {
+                            const existingIds = new Set(prev.map(m => m._id));
+                            const uniqueNewMatches = response.data.data.filter(m => !existingIds.has(m._id));
+                            return [...prev, ...uniqueNewMatches];
+                        });
+                        setHasMore(response.data.data.length >= 10);
+                    }
+                } catch (loadError) {
+                    console.error('Error loading more matches:', loadError);
+                    setHasMore(false);
+                }
             }
 
         } catch (err) {
             console.error('Swipe error:', err);
-            toast.error('Failed to process swipe. Please try again.');
             
+            // Revert state changes
             setCurrentIndex(prev => Math.max(prev - 1, 0));
             setSwipeHistory(prev => prev.slice(0, -1));
             
+            // Show error with undo option
             toast((t) => (
                 <div>
-                    <p>Failed to process swipe.</p>
+                    <p>{err.message || 'Failed to process swipe.'}</p>
                     <button 
                         onClick={() => handleUndo(t.id)}
                         className="mt-2 bg-blue-500 text-white px-4 py-2 rounded"
@@ -437,8 +576,17 @@ const SwipeToMatch = () => {
             ));
         } finally {
             setIsLoading(false);
+            // Cleanup animation state
+            activeAnimationsRef.current.delete(animationId);
+            const cardElement = document.querySelector(`[data-user-id="${potentialMatch._id}"]`);
+            if (cardElement) {
+                cardElement.style.transition = 'none';
+                // Reset any ongoing animations
+                const animations = cardElement.getAnimations();
+                animations.forEach(animation => animation.cancel());
+            }
         }
-    }, [currentIndex, potentialMatches, hasMore, processMatchQueue, handleUndo, lastSwipeTimestamp]);
+    }, [currentIndex, potentialMatches, hasMore, processMatchQueue, handleUndo, lastSwipeTimestamp, users]);
 
     const handleFilterChange = useCallback((newFilters) => {
         setFilters(newFilters);
@@ -597,13 +745,13 @@ const SwipeToMatch = () => {
 
                     {/* Swipe Cards */}
                     <div className="max-w-lg mx-auto relative h-[600px]">
-                        <AnimatePresence>
-                            {potentialMatches.map((user, index) => {
-                                if (index < currentIndex) return null;
-                                
-                                const isTop = index === currentIndex;
-                                
-                                return (
+                        {potentialMatches.map((user, index) => {
+                            if (index < currentIndex || index >= currentIndex + 3) return null;
+                            
+                            const isTop = index === currentIndex;
+                            
+                            return (
+                                <AnimatePresence key={user._id} mode="wait">
                                     <SwipeCard
                                         key={user._id}
                                         user={user}
@@ -616,10 +764,11 @@ const SwipeToMatch = () => {
                                             zIndex: potentialMatches.length - index
                                         }}
                                         analytics={analytics}
+                                        data-user-id={user._id}
                                     />
-                                );
-                            })}
-                        </AnimatePresence>
+                                </AnimatePresence>
+                            );
+                        })}
                     </div>
 
                     {/* Match Notification */}

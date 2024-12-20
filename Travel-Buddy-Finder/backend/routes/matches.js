@@ -328,88 +328,89 @@ router.get('/potential', protect, matchesLimiter, async (req, res) => {
             filterConditions.verificationLevel = { $gte: 2 };
         }
 
-        // Find potential matches with enhanced aggregation
-        const potentialMatches = await User.aggregate([
-            { $match: filterConditions },
-            {
-                $addFields: {
-                    distance: {
-                        $cond: {
-                            if: { $and: [
-                                { $isArray: ['$location.coordinates'] },
-                                { $isArray: [currentUser.location.coordinates] }
-                            ]},
-                            then: {
-                                $function: {
-                                    body: calculateDistance.toString(),
-                                    args: ['$location.coordinates', currentUser.location.coordinates],
-                                    lang: 'js'
-                                }
-                            },
-                            else: null
-                        }
-                    }
-                }
-            },
-            {
-                $addFields: {
-                    matchScore: {
-                        $function: {
-                            body: calculateMatchScore.toString(),
-                            args: ['$$ROOT', currentUser],
-                            lang: 'js'
-                        }
-                    }
-                }
-            },
-            { $match: { matchScore: { $gte: lastSwipeDirection === 'right' ? 60 : 40 } } },
-            { 
-                $sort: { 
-                    matchScore: -1,
-                    distance: 1,
-                    lastActive: -1 
-                } 
-            },
-            { $skip: skip },
-            { $limit: limit },
-            {
-                $project: {
-                    password: 0,
-                    __v: 0,
-                    blockedUsers: 0,
-                    rejectedMatches: 0,
-                    verificationDetails: 0
-                }
-            }
-        ]).exec();
+        // Use a simpler query first to avoid aggregation pipeline errors
+        const potentialMatches = await User.find(filterConditions)
+            .select('+travelPreferences +personalityType +languages +location')
+            .limit(limit)
+            .skip(skip)
+            .lean();
 
+        // Then process the matches in memory
+        const processedMatches = potentialMatches.map(match => {
+            try {
+                // Calculate distance if location data is valid
+                let distance = null;
+                if (match.location?.coordinates?.length === 2 && 
+                    currentUser.location?.coordinates?.length === 2) {
+                    try {
+                        distance = calculateDistance(
+                            match.location.coordinates,
+                            currentUser.location.coordinates
+                        );
+                    } catch (err) {
+                        console.error('Distance calculation error:', err);
+                    }
+                }
+
+                // Calculate match score
+                let matchScore = 50; // Default score
+                try {
+                    matchScore = calculateMatchScore(match, currentUser);
+                } catch (err) {
+                    console.error('Match score calculation error:', err);
+                }
+
+                return {
+                    ...match,
+                    distance,
+                    matchScore
+                };
+            } catch (err) {
+                console.error('Match processing error:', err);
+                return {
+                    ...match,
+                    distance: null,
+                    matchScore: 50
+                };
+            }
+        });
+
+        // Sort matches by score and distance
+        const sortedMatches = processedMatches.sort((a, b) => {
+            if (a.matchScore === b.matchScore) {
+                if (a.distance === null) return 1;
+                if (b.distance === null) return -1;
+                return a.distance - b.distance;
+            }
+            return b.matchScore - a.matchScore;
+        });
         // Calculate statistics for metadata
-        const scores = potentialMatches.map(m => m.matchScore);
-        const distances = potentialMatches
+        const scores = sortedMatches.map(m => m.matchScore);
+        const distances = sortedMatches
             .filter(m => m.distance != null)
             .map(m => m.distance);
 
         // Get total count for pagination
         const totalCount = await User.countDocuments(filterConditions);
 
-        // Prepare response with enhanced metadata
+        // Prepare response
         const response = {
             status: 'success',
-            results: potentialMatches.length,
+            results: sortedMatches.length,
             page,
-            data: potentialMatches,
+            data: sortedMatches,
             metadata: {
                 averageScore: scores.length ? 
-                    scores.reduce((acc, score) => acc + score, 0) / scores.length : 0,
+                    Math.round(scores.reduce((acc, score) => acc + score, 0) / scores.length) : 0,
                 scoreRange: scores.length ? {
                     min: Math.min(...scores),
                     max: Math.max(...scores)
                 } : null,
                 averageDistance: distances.length ?
-                    distances.reduce((acc, dist) => acc + dist, 0) / distances.length : null,
+                    Math.round(distances.reduce((acc, dist) => acc + dist, 0) / distances.length) : null,
                 distanceRange: distances.length ? {
-                    min: Math.min(...distances),
-                    max: Math.max(...distances)
+                    min: Math.round(Math.min(...distances)),
+                    max: Math.round(Math.max(...distances))
                 } : null,
                 totalPages: Math.ceil(totalCount / limit)
             }
