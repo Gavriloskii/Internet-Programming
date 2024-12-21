@@ -1,13 +1,12 @@
 const tf = require('@tensorflow/tfjs-node');
-const redis = require('redis');
-const { promisify } = require('util');
+const BaseMLService = require('./base/BaseMLService');
 
-class MLPredictor {
+class MLPredictor extends BaseMLService {
     constructor() {
-        this.model = null;
-        this.redisClient = redis.createClient(process.env.REDIS_URL);
-        this.getAsync = promisify(this.redisClient.get).bind(this.redisClient);
-        this.setAsync = promisify(this.redisClient.set).bind(this.redisClient);
+        super({
+            retentionPeriod: 86400, // 24 hours
+            modelPath: 'file://./models/performance_model/model.json'
+        });
         this.initialized = false;
         this.featureScaler = null;
         this.labelScaler = null;
@@ -21,7 +20,7 @@ class MLPredictor {
             await this.initializeScalers();
             this.initialized = true;
         } catch (error) {
-            console.error('Error initializing ML predictor:', error);
+            await this.logEvent('Error', { message: 'Error initializing ML predictor', error });
             throw error;
         }
     }
@@ -63,15 +62,6 @@ class MLPredictor {
         return model;
     }
 
-    async loadModel() {
-        try {
-            return await tf.loadLayersModel('file://./models/performance_model/model.json');
-        } catch (error) {
-            console.log('No existing model found, creating new one');
-            return null;
-        }
-    }
-
     async initializeScalers() {
         const cachedScalers = await this.getAsync('ml_scalers');
         if (cachedScalers) {
@@ -105,10 +95,11 @@ class MLPredictor {
             data.diskUsage
         ];
 
-        // Standardize features
-        return features.map((value, index) => 
-            (value - this.featureScaler.mean[index]) / this.featureScaler.std[index]
-        );
+        return this.preprocessData(features, {
+            normalize: true,
+            fillMissing: true,
+            removeOutliers: true
+        });
     }
 
     async predictPerformance(currentMetrics) {
@@ -141,7 +132,7 @@ class MLPredictor {
                 apiPrediction: denormalizedPredictions[3]
             };
         } catch (error) {
-            console.error('Error making prediction:', error);
+            await this.logEvent('Error', { message: 'Error making prediction', error });
             throw error;
         }
     }
@@ -188,44 +179,28 @@ class MLPredictor {
             await this.updateScalers(features, labels);
 
         } catch (error) {
-            console.error('Error updating model:', error);
+            await this.logEvent('Error', { message: 'Error updating model', error });
             throw error;
         }
     }
 
     async updateScalers(features, labels) {
         // Calculate new means and standard deviations
-        const featureMeans = features[0].map((_, colIndex) => 
-            features.reduce((sum, row) => sum + row[colIndex], 0) / features.length
-        );
-        const featureStds = features[0].map((_, colIndex) => {
-            const mean = featureMeans[colIndex];
-            const squaredDiffs = features.map(row => Math.pow(row[colIndex] - mean, 2));
-            return Math.sqrt(squaredDiffs.reduce((a, b) => a + b) / features.length);
-        });
-
-        const labelMeans = labels[0].map((_, colIndex) => 
-            labels.reduce((sum, row) => sum + row[colIndex], 0) / labels.length
-        );
-        const labelStds = labels[0].map((_, colIndex) => {
-            const mean = labelMeans[colIndex];
-            const squaredDiffs = labels.map(row => Math.pow(row[colIndex] - mean, 2));
-            return Math.sqrt(squaredDiffs.reduce((a, b) => a + b) / labels.length);
-        });
+        const featureStats = this.calculateMetricStats(features.flat());
+        const labelStats = this.calculateMetricStats(labels.flat());
 
         // Update scalers
-        this.featureScaler = { mean: featureMeans, std: featureStds };
-        this.labelScaler = { mean: labelMeans, std: labelStds };
+        this.featureScaler = { mean: featureStats.mean, std: featureStats.std };
+        this.labelScaler = { mean: labelStats.mean, std: labelStats.std };
 
         // Cache updated scalers
-        await this.setAsync('ml_scalers', JSON.stringify({
+        await this.storeMetric('ml_scalers', {
             featureScaler: this.featureScaler,
             labelScaler: this.labelScaler
-        }));
+        });
     }
 
     async getPredictionConfidence(prediction) {
-        // Calculate confidence based on prediction variance
         const confidenceThresholds = {
             high: 0.8,
             medium: 0.6,

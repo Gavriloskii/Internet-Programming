@@ -1,28 +1,16 @@
-const ExcelJS = require('exceljs');
-const nodemailer = require('nodemailer');
 const cron = require('node-cron');
+const BaseReportService = require('./base/BaseReportService');
 const matchAnalytics = require('./matchAnalytics');
 const User = require('../models/User');
-const path = require('path');
-const fs = require('fs').promises;
 
-class ReportGenerator {
+class ReportGenerator extends BaseReportService {
     constructor() {
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            port: process.env.SMTP_PORT,
-            secure: process.env.SMTP_SECURE === 'true',
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS
-            }
+        super({
+            retentionPeriod: 604800 // 7 days
         });
-
-        // Initialize scheduled reports
         this.initializeScheduledReports();
     }
 
-    // Schedule automated reports
     initializeScheduledReports() {
         // Daily report at 1 AM
         cron.schedule('0 1 * * *', () => {
@@ -44,19 +32,41 @@ class ReportGenerator {
         try {
             const reportData = await this.gatherReportData(type);
             const reportFile = await this.createExcelReport(reportData, type);
-            await this.sendReportEmail(reportFile, type);
-            await fs.unlink(reportFile); // Clean up file after sending
+            
+            const admins = await User.find({ role: 'admin' });
+            const adminEmails = admins.map(admin => admin.email);
+
+            if (adminEmails.length === 0) {
+                await this.logEvent('Warning', {
+                    message: 'No admin users found to send report to',
+                    type
+                });
+                return;
+            }
+
+            await this.sendReportEmail(reportFile, {
+                recipients: adminEmails,
+                subject: `Travel Buddy Finder - ${this.formatTitle(type)} Analytics Report`,
+                template: this.getEmailTemplate(type, ['System Overview', 'Match Quality', 'User Statistics']),
+                type
+            });
+
+            await this.cleanupReport(reportFile);
+            
+            await this.logEvent('Report', {
+                message: `${type} report generated and sent successfully`,
+                recipients: adminEmails.length
+            });
         } catch (error) {
-            console.error(`Error generating ${type} report:`, error);
+            await this.logEvent('Error', {
+                message: `Error generating ${type} report`,
+                error: error.message
+            });
         }
     }
 
     async gatherReportData(type) {
-        const timeRanges = {
-            daily: '24h',
-            weekly: '7d',
-            monthly: '30d'
-        };
+        const timeRange = this.getTimeRange(type);
 
         const [
             systemAnalytics,
@@ -64,44 +74,22 @@ class ReportGenerator {
             userStats
         ] = await Promise.all([
             matchAnalytics.getSystemAnalytics(),
-            matchAnalytics.getMatchQualityReport(timeRanges[type]),
+            matchAnalytics.getMatchQualityReport(timeRange),
             this.getUserStatistics()
         ]);
 
         return {
-            systemAnalytics,
+            systemOverview: {
+                ...systemAnalytics,
+                reportType: type,
+                generatedAt: new Date()
+            },
             matchQuality,
-            userStats,
-            reportType: type,
-            generatedAt: new Date()
+            userStatistics: userStats
         };
     }
 
-    async createExcelReport(data, type) {
-        const workbook = new ExcelJS.Workbook();
-        const filename = `match_analytics_${type}_${Date.now()}.xlsx`;
-        const filepath = path.join(__dirname, '../temp', filename);
-
-        // System Overview Sheet
-        const systemSheet = workbook.addWorksheet('System Overview');
-        this.addSystemOverviewSheet(systemSheet, data.systemAnalytics);
-
-        // Match Quality Sheet
-        const qualitySheet = workbook.addWorksheet('Match Quality');
-        this.addMatchQualitySheet(qualitySheet, data.matchQuality);
-
-        // User Statistics Sheet
-        const userSheet = workbook.addWorksheet('User Statistics');
-        this.addUserStatisticsSheet(userSheet, data.userStats);
-
-        // Ensure temp directory exists
-        await fs.mkdir(path.join(__dirname, '../temp'), { recursive: true });
-        await workbook.xlsx.writeFile(filepath);
-
-        return filepath;
-    }
-
-    addSystemOverviewSheet(sheet, data) {
+    async addSystemOverviewSheet(sheet, data) {
         sheet.columns = [
             { header: 'Metric', key: 'metric', width: 30 },
             { header: 'Value', key: 'value', width: 20 }
@@ -120,7 +108,7 @@ class ReportGenerator {
         this.styleSheet(sheet);
     }
 
-    addMatchQualitySheet(sheet, data) {
+    async addMatchQualitySheet(sheet, data) {
         sheet.columns = [
             { header: 'Score Range', key: 'range', width: 20 },
             { header: 'Count', key: 'count', width: 15 },
@@ -138,7 +126,7 @@ class ReportGenerator {
         this.styleSheet(sheet);
     }
 
-    addUserStatisticsSheet(sheet, data) {
+    async addUserStatisticsSheet(sheet, data) {
         sheet.columns = [
             { header: 'Metric', key: 'metric', width: 30 },
             { header: 'Value', key: 'value', width: 20 }
@@ -153,67 +141,6 @@ class ReportGenerator {
 
         sheet.addRows(stats);
         this.styleSheet(sheet);
-    }
-
-    styleSheet(sheet) {
-        // Style header row
-        sheet.getRow(1).font = { bold: true };
-        sheet.getRow(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE0E0E0' }
-        };
-
-        // Add borders to all cells
-        sheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-            });
-        });
-    }
-
-    async sendReportEmail(filepath, type) {
-        const admins = await User.find({ role: 'admin' });
-        const adminEmails = admins.map(admin => admin.email);
-
-        if (adminEmails.length === 0) {
-            console.warn('No admin users found to send report to');
-            return;
-        }
-
-        const mailOptions = {
-            from: process.env.SMTP_FROM,
-            to: adminEmails.join(', '),
-            subject: `Travel Buddy Finder - ${type.charAt(0).toUpperCase() + type.slice(1)} Analytics Report`,
-            html: this.getEmailTemplate(type),
-            attachments: [{
-                filename: path.basename(filepath),
-                path: filepath
-            }]
-        };
-
-        await this.transporter.sendMail(mailOptions);
-    }
-
-    getEmailTemplate(type) {
-        return `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2c5282;">Travel Buddy Finder Analytics Report</h2>
-                <p>Please find attached the ${type} analytics report for Travel Buddy Finder.</p>
-                <p>This report includes:</p>
-                <ul>
-                    <li>System Overview</li>
-                    <li>Match Quality Metrics</li>
-                    <li>User Statistics</li>
-                </ul>
-                <p style="color: #666;">This is an automated report. Please do not reply to this email.</p>
-            </div>
-        `;
     }
 
     async getUserStatistics() {
@@ -234,20 +161,33 @@ class ReportGenerator {
         };
     }
 
-    // Export data for custom date range
     async exportCustomReport(startDate, endDate, format = 'xlsx') {
-        const data = await this.gatherReportData('custom');
-        
-        if (format === 'xlsx') {
-            return this.createExcelReport(data, 'custom');
-        } else if (format === 'json') {
-            return {
-                data,
-                metadata: {
-                    exportedAt: new Date(),
-                    dateRange: { startDate, endDate }
-                }
-            };
+        try {
+            const { start, end } = this.validateDateRange(startDate, endDate);
+            const data = await this.gatherReportData('custom');
+            
+            if (format === 'xlsx') {
+                return this.createExcelReport(data, 'custom');
+            } else if (format === 'json') {
+                return {
+                    data,
+                    metadata: {
+                        exportedAt: new Date(),
+                        dateRange: { start, end }
+                    }
+                };
+            } else {
+                throw new Error('Unsupported format');
+            }
+        } catch (error) {
+            await this.logEvent('Error', {
+                message: 'Failed to export custom report',
+                error: error.message,
+                format,
+                startDate,
+                endDate
+            });
+            throw error;
         }
     }
 }

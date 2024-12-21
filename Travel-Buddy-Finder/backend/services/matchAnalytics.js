@@ -1,38 +1,25 @@
-const mongoose = require('mongoose');
-const redis = require('redis');
-const { promisify } = require('util');
+const BaseAnalyticsService = require('./base/BaseAnalyticsService');
 const EnhancedMatch = require('../models/enhancedMatch');
 
-class MatchAnalytics {
+class MatchAnalytics extends BaseAnalyticsService {
     constructor() {
-        this.redisClient = redis.createClient(process.env.REDIS_URL);
-        this.getAsync = promisify(this.redisClient.get).bind(this.redisClient);
-        this.setAsync = promisify(this.redisClient.set).bind(this.redisClient);
-        this.incrAsync = promisify(this.redisClient.incr).bind(this.redisClient);
-        this.zaddAsync = promisify(this.redisClient.zadd).bind(this.redisClient);
-        this.zrangeAsync = promisify(this.redisClient.zrange).bind(this.redisClient);
+        super({
+            retentionPeriod: 86400 // 24 hours
+        });
     }
 
-    // Track match creation and quality
     async trackMatch(match, user1, user2) {
         try {
-            const timestamp = Date.now();
             const matchData = {
                 matchId: match._id,
                 score: match.matchScore,
                 compatibilityScores: match.compatibilityScores,
-                timestamp,
                 users: [user1._id, user2._id],
                 metadata: match.metadata
             };
 
-            // Store match analytics in Redis for real-time access
-            await this.setAsync(
-                `match:analytics:${match._id}`,
-                JSON.stringify(matchData),
-                'EX',
-                86400 // 24 hours
-            );
+            // Store match analytics
+            await this.storeMetric(`match:analytics:${match._id}`, matchData);
 
             // Track match score distribution
             await this.zaddAsync(
@@ -52,52 +39,43 @@ class MatchAnalytics {
 
             return true;
         } catch (error) {
-            console.error('Error tracking match analytics:', error);
+            await this.logAlert('Match', 'Error tracking match analytics', error);
             return false;
         }
     }
 
-    // Track user interaction with matches
     async trackInteraction(userId, matchId, interactionType, data = {}) {
         try {
-            const timestamp = Date.now();
             const interactionData = {
                 userId,
                 matchId,
                 type: interactionType,
-                timestamp,
                 ...data
             };
 
-            // Store interaction in Redis
-            await this.setAsync(
-                `interaction:${userId}:${matchId}:${timestamp}`,
-                JSON.stringify(interactionData),
-                'EX',
-                604800 // 7 days
-            );
+            // Store interaction
+            await this.storeMetric(`interaction:${userId}:${matchId}`, interactionData, 604800); // 7 days
 
             // Update interaction counters
-            await this.incrAsync(`interactions:${interactionType}:count`);
-            await this.incrAsync(`user:${userId}:${interactionType}:count`);
+            await this.incrByAsync(`interactions:${interactionType}:count`, 1);
+            await this.incrByAsync(`user:${userId}:${interactionType}:count`, 1);
 
             // Track interaction timing
             if (data.responseTime) {
                 await this.zaddAsync(
                     'interaction:response:times',
                     data.responseTime,
-                    `${userId}:${matchId}:${timestamp}`
+                    `${userId}:${matchId}:${Date.now()}`
                 );
             }
 
             return true;
         } catch (error) {
-            console.error('Error tracking interaction:', error);
+            await this.logAlert('Interaction', 'Error tracking interaction', error);
             return false;
         }
     }
 
-    // Track match quality metrics
     async updateMatchQualityMetrics(match) {
         try {
             const metricsKey = 'match:quality:metrics';
@@ -120,17 +98,14 @@ class MatchAnalytics {
                 currentMetrics.compatibilityAverages[key].count += 1;
             });
 
-            // Store updated metrics
             await this.setAsync(metricsKey, JSON.stringify(currentMetrics));
-
             return true;
         } catch (error) {
-            console.error('Error updating match quality metrics:', error);
+            await this.logAlert('MatchQuality', 'Error updating match quality metrics', error);
             return false;
         }
     }
 
-    // Track user-specific match metrics
     async trackUserMatchMetrics(userId, match) {
         try {
             const userMetricsKey = `user:${userId}:match:metrics`;
@@ -149,17 +124,14 @@ class MatchAnalytics {
                 currentMetrics.personalityScores.push(match.compatibilityScores.personality);
             }
 
-            // Store updated metrics
             await this.setAsync(userMetricsKey, JSON.stringify(currentMetrics));
-
             return true;
         } catch (error) {
-            console.error('Error tracking user match metrics:', error);
+            await this.logAlert('UserMetrics', 'Error tracking user match metrics', error);
             return false;
         }
     }
 
-    // Get match quality report
     async getMatchQualityReport(timeRange = '24h') {
         try {
             const metrics = JSON.parse(await this.getAsync('match:quality:metrics') || '{}');
@@ -179,12 +151,11 @@ class MatchAnalytics {
                 timestamp: Date.now()
             };
         } catch (error) {
-            console.error('Error generating match quality report:', error);
+            await this.logAlert('Report', 'Error generating match quality report', error);
             return null;
         }
     }
 
-    // Get user match analytics
     async getUserMatchAnalytics(userId) {
         try {
             const userMetrics = JSON.parse(
@@ -205,12 +176,11 @@ class MatchAnalytics {
                 timestamp: Date.now()
             };
         } catch (error) {
-            console.error('Error getting user match analytics:', error);
+            await this.logAlert('UserAnalytics', 'Error getting user match analytics', error);
             return null;
         }
     }
 
-    // Get system-wide analytics
     async getSystemAnalytics() {
         try {
             const [
@@ -230,12 +200,11 @@ class MatchAnalytics {
                 timestamp: Date.now()
             };
         } catch (error) {
-            console.error('Error getting system analytics:', error);
+            await this.logAlert('SystemAnalytics', 'Error getting system analytics', error);
             return null;
         }
     }
 
-    // Helper method to get interaction counts
     async getInteractionCounts() {
         try {
             const types = ['like', 'dislike', 'message', 'match'];
@@ -253,7 +222,6 @@ class MatchAnalytics {
         }
     }
 
-    // Helper method to get response times
     async getResponseTimes() {
         try {
             const times = await this.zrangeAsync('interaction:response:times', 0, -1, 'WITHSCORES');

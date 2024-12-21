@@ -1,16 +1,17 @@
 const tf = require('@tensorflow/tfjs-node');
-const redis = require('redis');
-const { promisify } = require('util');
 const cron = require('node-cron');
+const BaseMLService = require('./base/BaseMLService');
 const performanceMonitor = require('./performanceMonitor');
 const anomalyPredictor = require('./anomalyPredictor');
 const mlPredictor = require('./mlPredictor');
 
-class ModelTrainer {
+class ModelTrainer extends BaseMLService {
     constructor() {
-        this.redisClient = redis.createClient(process.env.REDIS_URL);
-        this.getAsync = promisify(this.redisClient.get).bind(this.redisClient);
-        this.setAsync = promisify(this.redisClient.set).bind(this.redisClient);
+        super({
+            retentionPeriod: 86400, // 24 hours
+            historicalWindow: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+        
         this.trainingInProgress = false;
         this.lastTrainingTime = null;
         this.minTrainingDataPoints = 1000;
@@ -39,7 +40,7 @@ class ModelTrainer {
             // Initialize training metrics
             await this.initializeTrainingMetrics();
         } catch (error) {
-            console.error('Error initializing model trainer:', error);
+            await this.logEvent('Error', { message: 'Error initializing model trainer', error });
             throw error;
         }
     }
@@ -68,7 +69,7 @@ class ModelTrainer {
                 await this.trainModels();
             }
         } catch (error) {
-            console.error('Error in checkAndTrain:', error);
+            await this.logEvent('Error', { message: 'Error in checkAndTrain', error });
             throw error;
         }
     }
@@ -97,26 +98,25 @@ class ModelTrainer {
 
             return false;
         } catch (error) {
-            console.error('Error checking retraining conditions:', error);
-            throw error;
+            await this.logEvent('Error', { message: 'Error checking retraining conditions', error });
+            return false;
         }
     }
 
     async trainModels() {
         this.trainingInProgress = true;
-        console.log('Starting model training...');
+        await this.logEvent('Training', { message: 'Starting model training' });
 
         try {
-            // Get training data
             const trainingData = await this.prepareTrainingData();
             
-            // Train anomaly prediction model
-            const anomalyModel = await this.trainAnomalyModel(trainingData);
-            
-            // Train ML prediction model
-            const mlModel = await this.trainMLModel(trainingData);
+            // Train both models
+            const [anomalyModel, mlModel] = await Promise.all([
+                this.trainAnomalyModel(trainingData),
+                this.trainMLModel(trainingData)
+            ]);
 
-            // Evaluate and save models
+            // Evaluate models
             const [anomalyMetrics, mlMetrics] = await Promise.all([
                 this.evaluateModel(anomalyModel, trainingData.validation),
                 this.evaluateModel(mlModel, trainingData.validation)
@@ -126,18 +126,22 @@ class ModelTrainer {
                 await Promise.all([
                     anomalyModel.save('file://./models/anomaly_prediction'),
                     mlModel.save('file://./models/ml_prediction'),
-                    this.updateTrainingMetrics(anomalyMetrics, mlMetrics)
+                    this.updateTrainingMetrics(anomalyMetrics, mlMetrics),
+                    this.storeMetric('last_model_training', Date.now())
                 ]);
 
-                this.lastTrainingTime = Date.now();
-                await this.setAsync('last_model_training', this.lastTrainingTime.toString());
-                
-                console.log('Model training completed successfully');
+                await this.logEvent('Training', { 
+                    message: 'Model training completed successfully',
+                    metrics: { anomalyMetrics, mlMetrics }
+                });
             } else {
-                console.log('New models did not show improvement, keeping current models');
+                await this.logEvent('Training', { 
+                    message: 'New models did not show improvement, keeping current models',
+                    metrics: { anomalyMetrics, mlMetrics }
+                });
             }
         } catch (error) {
-            console.error('Error during model training:', error);
+            await this.logEvent('Error', { message: 'Error during model training', error });
             throw error;
         } finally {
             this.trainingInProgress = false;
@@ -146,12 +150,7 @@ class ModelTrainer {
 
     async prepareTrainingData() {
         try {
-            // Get historical performance data
-            const endTime = Date.now();
-            const startTime = endTime - (30 * 24 * 60 * 60 * 1000); // Last 30 days
-            const historicalData = await performanceMonitor.getPerformanceReport(startTime, endTime);
-
-            // Prepare features and labels
+            const historicalData = await this.getHistoricalData('performance_metrics');
             const { features, labels } = this.processHistoricalData(historicalData);
 
             // Split into training and validation sets
@@ -168,7 +167,7 @@ class ModelTrainer {
                 }
             };
         } catch (error) {
-            console.error('Error preparing training data:', error);
+            await this.logEvent('Error', { message: 'Error preparing training data', error });
             throw error;
         }
     }
@@ -198,7 +197,10 @@ class ModelTrainer {
             ]);
         }
 
-        return { features, labels };
+        return { 
+            features: this.preprocessData(features, { normalize: true }), 
+            labels: this.preprocessData(labels, { normalize: true })
+        };
     }
 
     async trainAnomalyModel(trainingData) {
@@ -211,12 +213,10 @@ class ModelTrainer {
         }));
         
         model.add(tf.layers.dropout({ rate: 0.2 }));
-        
         model.add(tf.layers.lstm({
             units: 16,
             returnSequences: false
         }));
-        
         model.add(tf.layers.dense({
             units: 4,
             activation: 'linear'
@@ -247,22 +247,19 @@ class ModelTrainer {
     }
 
     async trainMLModel(trainingData) {
-        // Similar to anomaly model but with different architecture
         const model = tf.sequential();
         
         model.add(tf.layers.dense({
-            inputShape: [50], // Flattened input
+            inputShape: [50],
             units: 32,
             activation: 'relu'
         }));
         
         model.add(tf.layers.dropout({ rate: 0.2 }));
-        
         model.add(tf.layers.dense({
             units: 16,
             activation: 'relu'
         }));
-        
         model.add(tf.layers.dense({
             units: 4,
             activation: 'sigmoid'
@@ -274,10 +271,7 @@ class ModelTrainer {
             metrics: ['accuracy']
         });
 
-        // Flatten features for dense layers
-        const flatFeatures = trainingData.training.features.map(
-            f => f.flat()
-        );
+        const flatFeatures = trainingData.training.features.map(f => f.flat());
 
         await model.fit(
             tf.tensor2d(flatFeatures),
@@ -329,13 +323,11 @@ class ModelTrainer {
     isModelImprovement(anomalyMetrics, mlMetrics) {
         const currentMetrics = this.currentTrainingMetrics;
         
-        // Calculate overall improvement
         const anomalyImprovement = 
             (1 - anomalyMetrics.mse) / (1 - currentMetrics.anomaly.mse) - 1;
         const mlImprovement = 
             (1 - mlMetrics.mse) / (1 - currentMetrics.ml.mse) - 1;
 
-        // Require at least 5% improvement in either model
         return anomalyImprovement > 0.05 || mlImprovement > 0.05;
     }
 
@@ -353,10 +345,7 @@ class ModelTrainer {
             ml: mlMetrics
         };
 
-        await this.setAsync(
-            'training_metrics',
-            JSON.stringify(this.currentTrainingMetrics)
-        );
+        await this.storeMetric('training_metrics', this.currentTrainingMetrics);
     }
 
     async checkModelPerformance() {
@@ -365,20 +354,21 @@ class ModelTrainer {
         try {
             const performance = await this.evaluateModelPerformance();
             if (performance < this.performanceThreshold) {
-                console.log('Model performance below threshold, initiating retraining...');
+                await this.logEvent('Performance', { 
+                    message: 'Model performance below threshold, initiating retraining',
+                    performance
+                });
                 await this.trainModels();
             }
         } catch (error) {
-            console.error('Error checking model performance:', error);
+            await this.logEvent('Error', { message: 'Error checking model performance', error });
         }
     }
 
     async evaluateModelPerformance() {
-        // Get recent predictions and actual values
         const recentPredictions = await this.getRecentPredictions();
-        if (recentPredictions.length < 100) return 1; // Not enough data
+        if (recentPredictions.length < 100) return 1;
 
-        // Calculate prediction accuracy
         const accuracy = recentPredictions.reduce((acc, pred) => {
             const error = Math.abs(pred.predicted - pred.actual);
             return acc + (error < 0.1 ? 1 : 0);
@@ -388,21 +378,11 @@ class ModelTrainer {
     }
 
     async getRecentPredictions() {
-        const predictions = [];
-        const keys = await this.redisClient.keys('prediction:*');
-        
-        for (const key of keys) {
-            const prediction = JSON.parse(await this.getAsync(key));
-            predictions.push(prediction);
-        }
-
-        return predictions;
+        return this.getHistoricalData('prediction', Date.now() - 24 * 60 * 60 * 1000);
     }
 
     async getTrainingDataSize() {
-        const endTime = Date.now();
-        const startTime = endTime - (30 * 24 * 60 * 60 * 1000);
-        const data = await performanceMonitor.getPerformanceReport(startTime, endTime);
+        const data = await this.getHistoricalData('performance_metrics');
         return data.length;
     }
 }

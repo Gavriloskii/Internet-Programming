@@ -1,13 +1,13 @@
-const tf = require('@tensorflow/tfjs-node');
-const redis = require('redis');
-const { promisify } = require('util');
+const BaseMLService = require('./base/BaseMLService');
 const performanceMonitor = require('./performanceMonitor');
 
-class AnomalyDetector {
+class AnomalyDetector extends BaseMLService {
     constructor() {
-        this.redisClient = redis.createClient(process.env.REDIS_URL);
-        this.getAsync = promisify(this.redisClient.get).bind(this.redisClient);
-        this.setAsync = promisify(this.redisClient.set).bind(this.redisClient);
+        super({
+            retentionPeriod: 86400, // 24 hours
+            historicalWindow: 24 * 60 * 60 * 1000 // 24 hours
+        });
+
         this.baselineStats = null;
         this.anomalyThresholds = {
             cpu: { low: 0.2, high: 0.8, zscore: 2.5 },
@@ -15,7 +15,6 @@ class AnomalyDetector {
             cache: { low: 0.5, high: 0.95, zscore: 2.5 },
             api: { low: 50, high: 200, zscore: 2.5 }
         };
-        this.historicalWindow = 24 * 60 * 60 * 1000; // 24 hours
     }
 
     async initialize() {
@@ -36,10 +35,7 @@ class AnomalyDetector {
 
     async calculateBaseline() {
         try {
-            // Get historical performance data
-            const endTime = Date.now();
-            const startTime = endTime - this.historicalWindow;
-            const historicalData = await performanceMonitor.getPerformanceReport(startTime, endTime);
+            const historicalData = await performanceMonitor.getPerformanceReport('24h');
 
             // Calculate baseline statistics
             this.baselineStats = {
@@ -52,38 +48,13 @@ class AnomalyDetector {
             };
 
             // Cache the baseline stats
-            await this.setAsync(
-                'anomaly_baseline_stats',
-                JSON.stringify(this.baselineStats),
-                'EX',
-                3600 // Cache for 1 hour
-            );
+            await this.storeMetric('anomaly_baseline_stats', this.baselineStats, 3600); // Cache for 1 hour
 
             return this.baselineStats;
         } catch (error) {
-            console.error('Error calculating baseline:', error);
+            await this.logEvent('Error', { message: 'Error calculating baseline', error });
             throw error;
         }
-    }
-
-    calculateMetricStats(values) {
-        const n = values.length;
-        if (n === 0) return { mean: 0, std: 0, median: 0 };
-
-        // Calculate mean
-        const mean = values.reduce((a, b) => a + b, 0) / n;
-
-        // Calculate standard deviation
-        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
-        const std = Math.sqrt(variance);
-
-        // Calculate median
-        const sorted = [...values].sort((a, b) => a - b);
-        const median = n % 2 === 0
-            ? (sorted[n/2 - 1] + sorted[n/2]) / 2
-            : sorted[Math.floor(n/2)];
-
-        return { mean, std, median };
     }
 
     async detectAnomalies(currentMetrics) {
@@ -134,10 +105,8 @@ class AnomalyDetector {
     }
 
     checkMetricAnomaly(metricName, currentValue, baselineStats, thresholds) {
-        // Calculate z-score
-        const zscore = Math.abs((currentValue - baselineStats.mean) / baselineStats.std);
+        const zscore = this.calculateZScore(currentValue, baselineStats.mean, baselineStats.std);
 
-        // Check for anomalies based on absolute thresholds and z-score
         const isAnomaly = 
             currentValue < thresholds.low ||
             currentValue > thresholds.high ||
@@ -158,60 +127,21 @@ class AnomalyDetector {
         return null;
     }
 
-    calculateSeverity(zscore) {
-        if (zscore > 4) return 'critical';
-        if (zscore > 3) return 'high';
-        if (zscore > 2) return 'medium';
-        return 'low';
-    }
-
     async updateThresholds(newThresholds) {
         this.anomalyThresholds = {
             ...this.anomalyThresholds,
             ...newThresholds
         };
 
-        // Recalculate baseline with new thresholds
         await this.calculateBaseline();
     }
 
     async getAnomalyHistory(startTime, endTime) {
-        try {
-            const anomalyKeys = await this.redisClient.keys('anomaly:*');
-            const anomalies = [];
-
-            for (const key of anomalyKeys) {
-                const anomaly = JSON.parse(await this.getAsync(key));
-                if (anomaly.timestamp >= startTime && anomaly.timestamp <= endTime) {
-                    anomalies.push(anomaly);
-                }
-            }
-
-            return anomalies.sort((a, b) => b.timestamp - a.timestamp);
-        } catch (error) {
-            console.error('Error getting anomaly history:', error);
-            throw error;
-        }
+        return this.getHistoricalData('anomaly', startTime, endTime);
     }
 
     async logAnomaly(anomaly) {
-        try {
-            const key = `anomaly:${anomaly.metric}:${anomaly.timestamp}`;
-            await this.setAsync(
-                key,
-                JSON.stringify(anomaly),
-                'EX',
-                7 * 24 * 60 * 60 // Store for 7 days
-            );
-
-            // Emit anomaly event if socket.io is available
-            if (global.io) {
-                global.io.emit('anomalyDetected', anomaly);
-            }
-        } catch (error) {
-            console.error('Error logging anomaly:', error);
-            throw error;
-        }
+        return this.logEvent('Anomaly', anomaly, 7 * 24 * 60 * 60); // Store for 7 days
     }
 
     getAnomalyDescription(anomaly) {
