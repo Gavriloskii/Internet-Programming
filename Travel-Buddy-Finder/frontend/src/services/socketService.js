@@ -51,6 +51,31 @@ class SocketService extends BaseSocketService {
     sendMessage(message) {
         this.emit('message', message);
     }
+
+    swipe(userId, direction) {
+        return new Promise((resolve, reject) => {
+            if (!this.connected) {
+                reject(new Error('Socket not connected'));
+                return;
+            }
+
+            this.emit('swipe', { targetUserId: userId, direction });
+            
+            // Set up a one-time listener for the swipe response
+            this.socket.once('swipeResult', (response) => {
+                if (!response.success) {
+                    reject(new Error(response.error));
+                } else {
+                    resolve(response);
+                }
+            });
+
+            // Add a timeout
+            setTimeout(() => {
+                reject(new Error('Swipe response timeout'));
+            }, 5000);
+        });
+    }
 }
 
 // Create a singleton instance

@@ -121,6 +121,10 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.ObjectId,
         ref: 'User'
     }],
+    likes: [{
+        type: mongoose.Schema.ObjectId,
+        ref: 'User'
+    }],
     conversations: [{
         type: String,
         ref: 'Conversation'

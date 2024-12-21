@@ -373,10 +373,18 @@ const SwipeToMatch = () => {
         };
     }, [filters]); // Cleanup when filters change
 
-    // Initialize matches and socket event listeners
+    // Initialize socket connection, matches and event listeners
     useEffect(() => {
         let isMounted = true;
         let retryTimeout;
+
+        // Initialize socket connection
+        try {
+            socketService.connect();
+        } catch (error) {
+            console.error('Failed to initialize socket connection:', error);
+            toast.error('Failed to establish connection. Some features may be limited.');
+        }
 
         const initializeMatches = async () => {
             if (!isMounted) return;
@@ -428,6 +436,7 @@ const SwipeToMatch = () => {
             isMounted = false;
             clearTimeout(retryTimeout);
             socketService.off('match', handleMatch);
+            socketService.disconnect(); // Cleanup socket connection
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }

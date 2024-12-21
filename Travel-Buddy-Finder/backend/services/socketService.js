@@ -136,12 +136,17 @@ class SocketService {
             }
 
             const [currentUser, targetUser] = await Promise.all([
-                User.findById(userId).select('travelPreferences personalityType'),
+                User.findById(userId).select('travelPreferences personalityType likes'),
                 User.findById(targetUserId).select('travelPreferences personalityType likes')
             ]);
 
             if (!currentUser || !targetUser) {
                 throw new Error('User not found');
+            }
+
+            // Initialize likes array if it doesn't exist
+            if (!targetUser.likes) {
+                targetUser.likes = [];
             }
 
             const newMatch = new Match({
@@ -170,9 +175,11 @@ class SocketService {
                 };
             }
 
-            await User.findByIdAndUpdate(userId, {
-                $addToSet: { likes: targetUserId }
-            });
+            // Update the current user's likes
+            await User.findByIdAndUpdate(userId, 
+                { $addToSet: { likes: targetUserId } },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
 
             return { 
                 isMatch: false, 

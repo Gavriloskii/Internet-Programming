@@ -21,7 +21,12 @@ const TravelProfile = () => {
     const [editedProfile, setEditedProfile] = useState({
         name: user?.name || '',
         bio: user?.bio || '',
-        location: user?.location || '',
+        location: {
+            type: 'Point',
+            coordinates: user?.location?.coordinates || [0, 0],
+            city: user?.location?.city || '',
+            country: user?.location?.country || ''
+        },
         languages: user?.languages || [],
         travelPreferences: user?.travelPreferences || {
             travelStyle: '',
@@ -146,15 +151,18 @@ const TravelProfile = () => {
                             {isEditing ? (
                                 <input
                                     type="text"
-                                    value={editedProfile.location}
+                                    value={editedProfile.location?.city || ''}
                                     onChange={(e) => setEditedProfile({
                                         ...editedProfile,
-                                        location: e.target.value
+                                        location: {
+                                            ...editedProfile.location,
+                                            city: e.target.value
+                                        }
                                     })}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg"
                                 />
                             ) : (
-                                user?.location
+                                `${user?.location?.city || ''}, ${user?.location?.country || ''}`
                             )}
                         </div>
                     </div>
@@ -190,7 +198,7 @@ const TravelProfile = () => {
                                     key={index}
                                     className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-sm"
                                 >
-                                    {language}
+                                    {language.language} - {language.proficiency}
                                     {isEditing && (
                                         <button
                                             onClick={() => setEditedProfile({
@@ -208,10 +216,16 @@ const TravelProfile = () => {
                                 <button
                                     onClick={() => {
                                         const language = prompt('Enter language');
-                                        if (language) {
+                                        const proficiency = prompt('Enter proficiency (Beginner/Intermediate/Advanced/Native)');
+                                        if (language && proficiency) {
                                             setEditedProfile({
                                                 ...editedProfile,
-                                                languages: [...editedProfile.languages, language]
+                                                languages: [...editedProfile.languages, {
+                                                    language,
+                                                    proficiency,
+                                                    _id: Date.now().toString(),
+                                                    id: Date.now().toString()
+                                                }]
                                             });
                                         }
                                     }}
