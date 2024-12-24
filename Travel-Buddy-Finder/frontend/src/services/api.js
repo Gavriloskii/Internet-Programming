@@ -45,7 +45,7 @@ export const users = {
     getProfile: () => api.get('/users/profile'),
     updateProfile: (data) => api.put('/users/profile', data),
     updatePreferences: (preferences) => api.put('/users/preferences', preferences),
-    uploadAvatar: (formData) => api.post('/users/avatar', formData, {
+    uploadProfilePicture: (formData) => api.post('/auth/upload-profile-picture', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     }),
     getPotentialMatches: (page = 1, filters = {}) => api.get('/matches/potential', {

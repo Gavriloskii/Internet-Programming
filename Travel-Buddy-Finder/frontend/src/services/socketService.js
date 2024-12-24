@@ -1,36 +1,43 @@
-import { store } from '../redux/store';
+import store from '../redux/store';
 import { handleNewMessage, setTypingStatus, updateOnlineStatus } from '../redux/chatSlice';
 import BaseSocketService from './base/BaseSocketService';
+import { SOCKET_EVENTS, SOCKET_CONFIG, SOCKET_URLS } from './constants/socketConstants';
 
 class SocketService extends BaseSocketService {
     constructor() {
         super({
-            maxReconnectAttempts: 5,
-            reconnectDelay: 1000
+            maxReconnectAttempts: SOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS,
+            reconnectDelay: SOCKET_CONFIG.RECONNECT_INTERVAL
         });
     }
 
     connect() {
-        const socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001';
+        const socketUrl = process.env.NODE_ENV === 'production' 
+            ? SOCKET_URLS.production 
+            : SOCKET_URLS.development;
+
         super.connect(socketUrl, {
             path: '/socket.io',
             auth: {
                 credentials: 'include'
-            }
+            },
+            pingTimeout: SOCKET_CONFIG.PING_TIMEOUT,
+            pingInterval: SOCKET_CONFIG.PING_INTERVAL
         });
+        
         this.setupEventHandlers();
     }
 
     setupEventHandlers() {
-        this.on('message', (messageData) => {
+        this.on(SOCKET_EVENTS.MESSAGE, (messageData) => {
             store.dispatch(handleNewMessage(messageData));
         });
 
-        this.on('typing', ({ conversationId, userId, isTyping }) => {
+        this.on(SOCKET_EVENTS.TYPING, ({ conversationId, userId, isTyping }) => {
             store.dispatch(setTypingStatus({ conversationId, userId, isTyping }));
         });
 
-        this.on('presence', ({ userId, status }) => {
+        this.on(SOCKET_EVENTS.PRESENCE, ({ userId, status }) => {
             store.dispatch(updateOnlineStatus({ userId, isOnline: status === 'online' }));
         });
     }
@@ -49,7 +56,7 @@ class SocketService extends BaseSocketService {
     }
 
     sendMessage(message) {
-        this.emit('message', message);
+        this.emit(SOCKET_EVENTS.MESSAGE, message);
     }
 
     swipe(userId, direction) {
@@ -59,22 +66,32 @@ class SocketService extends BaseSocketService {
                 return;
             }
 
-            this.emit('swipe', { targetUserId: userId, direction });
+            this.emit(SOCKET_EVENTS.SWIPE, { targetUserId: userId, direction });
             
-            // Set up a one-time listener for the swipe response
-            this.socket.once('swipeResult', (response) => {
+            const timeout = setTimeout(() => {
+                this.off(SOCKET_EVENTS.SWIPE_RESULT);
+                reject(new Error('Swipe response timeout'));
+            }, 5000);
+
+            this.on(SOCKET_EVENTS.SWIPE_RESULT, (response) => {
+                clearTimeout(timeout);
+                this.off(SOCKET_EVENTS.SWIPE_RESULT);
+                
                 if (!response.success) {
                     reject(new Error(response.error));
                 } else {
                     resolve(response);
                 }
             });
-
-            // Add a timeout
-            setTimeout(() => {
-                reject(new Error('Swipe response timeout'));
-            }, 5000);
         });
+    }
+
+    setTypingStatus(conversationId, isTyping) {
+        this.emit(SOCKET_EVENTS.TYPING, { conversationId, isTyping });
+    }
+
+    updatePresence(status) {
+        this.emit(SOCKET_EVENTS.PRESENCE, { status });
     }
 }
 

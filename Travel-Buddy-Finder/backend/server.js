@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const http = require('http');
+const path = require('path');
 const SocketService = require('./services/socketService');
 const authRoutes = require('./routes/auth');
 const { setupSecurity } = require('./middleware/security');
@@ -118,8 +119,8 @@ app.use('/api/journals', protect, journalsRoutes);
 app.use('/api/matches', protect, matchesRoutes);
 app.use('/api/analytics', protect, analyticsLimiter, analyticsRoutes);
 
-// Serve static files from the uploads directory
-app.use('/uploads', express.static('uploads'));
+// Serve static files from the public directory
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // API Documentation route
 app.get('/api/docs', (req, res) => {

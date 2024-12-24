@@ -3,7 +3,10 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { authLimiter } = require('../middleware/security');
+const upload = require('../middleware/uploadMiddleware');
+const { protect } = require('../middleware/auth');
 const { AppError } = require('../middleware/errorHandler');
+const path = require('path');
 
 // Import User model
 const User = require('../models/User');
@@ -65,13 +68,41 @@ const createSendToken = (user, statusCode, res) => {
     });
 };
 
+// Upload profile picture
+router.post('/upload-profile-picture', protect, upload.single('profilePicture'), async (req, res, next) => {
+    try {
+        if (!req.file) {
+            throw new AppError('Please upload a file', 400);
+        }
+
+        // Update user's profile picture in database
+        const user = await User.findByIdAndUpdate(
+            req.user.id,
+            { profilePicture: req.file.filename },
+            { new: true }
+        );
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                profilePicture: user.profilePicture
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 // Register new user
 router.post('/signup', async (req, res, next) => {
     try {
+        console.log('Signup request body:', req.body);
+        console.log('Headers:', req.headers);
         const { email, password, name } = req.body;
 
         // Validate input
         if (!email || !password || !name) {
+            console.log('Missing required fields:', { email: !!email, password: !!password, name: !!name });
             throw new AppError('Please provide email, password and name', 400);
         }
 
@@ -82,8 +113,25 @@ router.post('/signup', async (req, res, next) => {
         }
 
         // Validate password strength
+        const passwordErrors = [];
         if (password.length < 8) {
-            throw new AppError('Password must be at least 8 characters long', 400);
+            passwordErrors.push('Password must be at least 8 characters long');
+        }
+        if (!/\d/.test(password)) {
+            passwordErrors.push('Password must contain at least one number');
+        }
+        if (!/[A-Z]/.test(password)) {
+            passwordErrors.push('Password must contain at least one uppercase letter');
+        }
+        if (!/[a-z]/.test(password)) {
+            passwordErrors.push('Password must contain at least one lowercase letter');
+        }
+        if (!/[!@#$%^&*]/.test(password)) {
+            passwordErrors.push('Password must contain at least one special character (!@#$%^&*)');
+        }
+
+        if (passwordErrors.length > 0) {
+            throw new AppError(passwordErrors.join('. '), 400);
         }
 
         // Check if user already exists
@@ -92,19 +140,36 @@ router.post('/signup', async (req, res, next) => {
             throw new AppError('Email already registered', 400);
         }
 
-        // Create new user
-        const user = await User.create({
-            email,
-            password,
-            name,
-            travelPreferences: {
-                budget: 'moderate',
-                pace: 'moderate',
-                accommodationPreference: 'flexible'
-            }
-        });
+        try {
+            // Create new user with default preferences
+            const userData = {
+                email,
+                password,
+                name,
+                passwordConfirm: password, // Add this to match the pre-save hook expectation
+                travelPreferences: {
+                    budget: 'moderate',
+                    pace: 'moderate',
+                    accommodationPreference: 'flexible'
+                }
+            };
 
-        createSendToken(user, 201, res);
+            const user = await User.create(userData);
+
+            createSendToken(user, 201, res);
+        } catch (err) {
+            console.log('User creation error:', err);
+            if (err.name === 'ValidationError') {
+                console.log('Validation errors:', err.errors);
+                const messages = Object.values(err.errors).map(e => e.message);
+                console.log('Validation error messages:', messages);
+                throw new AppError(messages.join('. '), 400);
+            }
+            if (err.code === 11000) {
+                throw new AppError('Email already exists', 400);
+            }
+            throw new AppError('Error creating user', 400);
+        }
     } catch (error) {
         next(error);
     }
@@ -227,6 +292,42 @@ router.patch('/update-password', async (req, res, next) => {
         await user.save();
 
         createSendToken(user, 200, res);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Upload profile picture
+router.post('/upload-profile-picture', async (req, res, next) => {
+    try {
+        const uploadSingle = upload.single('profilePicture');
+        
+        uploadSingle(req, res, async (err) => {
+            if (err) {
+                return next(new AppError(err.message, 400));
+            }
+
+            if (!req.file) {
+                return next(new AppError('Please upload an image file', 400));
+            }
+
+            try {
+                const user = await verifyAndGetUser(req);
+                
+                // Update user's profile picture in database
+                user.profilePicture = `/uploads/profile-pictures/${req.file.filename}`;
+                await user.save({ validateBeforeSave: false });
+
+                res.status(200).json({
+                    status: 'success',
+                    data: {
+                        profilePicture: user.profilePicture
+                    }
+                });
+            } catch (error) {
+                next(error);
+            }
+        });
     } catch (error) {
         next(error);
     }

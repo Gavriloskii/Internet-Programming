@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import UserDashboard from './pages/UserDashboard'; // Importing UserDashboard
 import { Provider, useSelector } from 'react-redux';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
@@ -22,6 +23,7 @@ import TravelJournal from './components/TravelJournal';
 import ChatList from './components/ChatList';
 import Chat from './components/Chat';
 import GroupChat from './components/GroupChat';
+import TestRedux from './components/TestRedux'; // Importing TestRedux
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -71,6 +73,9 @@ const App = () => {
                     <Route path="/" element={<HomePage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    {/* Temporary: Making dashboard directly accessible */}
+                    <Route path="/dashboard" element={<UserDashboard />} />
+                    
                     <Route
                         path="/app"
                         element={
@@ -92,6 +97,7 @@ const App = () => {
                         <Route path="events" element={<EventsPage />} />
                         <Route path="forum" element={<ForumPage />} />
                         <Route path="itinerary" element={<ItineraryPage />} />
+                        <Route path="dashboard" element={<UserDashboard />} />
                     </Route>
                     <Route
                         path="*"
@@ -118,6 +124,7 @@ const App = () => {
                         }
                     />
                 </Routes>
+                <TestRedux /> {/* Adding TestRedux component here */}
             </BrowserRouter>
         </Provider>
     );

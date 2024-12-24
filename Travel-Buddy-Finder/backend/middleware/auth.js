@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { AppError } = require('./errorHandler');
 const User = require('../models/User');
+const logger = require('../utils/logger'); // Assuming a logger utility is available
 
 // Protect routes - Authentication check
 exports.protect = async (req, res, next) => {

@@ -89,6 +89,7 @@ const Signup = () => {
                 name: formData.name,
                 email: formData.email,
                 password: formData.password,
+                passwordConfirm: formData.confirmPassword
             })).unwrap();
             console.log('Signup result:', result);
 

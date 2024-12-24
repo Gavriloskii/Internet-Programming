@@ -22,6 +22,16 @@ const userSchema = new mongoose.Schema({
         minlength: 8,
         select: false // Don't send password in queries by default
     },
+    passwordConfirm: {
+        type: String,
+        required: [true, 'Please confirm your password'],
+        validate: {
+            validator: function(el) {
+                return el === this.password;
+            },
+            message: 'Passwords do not match'
+        }
+    },
     profilePicture: {
         type: String,
         default: 'default.jpg'
@@ -168,10 +178,15 @@ userSchema.pre('save', async function(next) {
     if (!this.isModified('password')) return next();
     
     try {
+        // Validate password confirmation
+        if (this.isNew && this.password !== this.passwordConfirm) {
+            throw new Error('Passwords do not match');
+        }
+
         // Hash the password with cost of 12
         this.password = await bcrypt.hash(this.password, 12);
         
-        // Remove passwordConfirm field
+        // Remove passwordConfirm field after validation
         this.passwordConfirm = undefined;
         next();
     } catch (error) {
