@@ -1,12 +1,48 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { login } from '../redux/userSlice';
+import SwipeCard from '../components/SwipeCard';
+import { users } from '../services/api';
 
 const UserDashboard = () => {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.user.user);
   const isAuthenticated = useSelector((state) => state.user.isAuthenticated);
-  
+  const [potentialMatches, setPotentialMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchPotentialMatches = async () => {
+      try {
+        const response = await users.getPotentialMatches();
+        setPotentialMatches(response.data);
+        setLoading(false);
+      } catch (err) {
+        setError('Failed to fetch potential matches');
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchPotentialMatches();
+    }
+  }, [user]);
+
+  const handleSwipe = async (direction, matchId) => {
+    console.log(`Swiped ${direction} on user ${matchId}`);
+    // Remove the swiped card from the stack
+    setPotentialMatches(prev => prev.filter(match => match._id !== matchId));
+    
+    if (direction === 'right') {
+      try {
+        await users.createMatch(matchId);
+      } catch (err) {
+        console.error('Failed to create match:', err);
+      }
+    }
+  };
+
   // Function to set test user data
   const handleTestLogin = () => {
     console.log('Attempting test login...');
@@ -16,30 +52,6 @@ const UserDashboard = () => {
       id: '123'
     }));
   };
-
-  useEffect(() => {
-    console.log('Current user state:', user);
-    console.log('Authentication state:', isAuthenticated);
-  }, [user, isAuthenticated]);
-
-  // Mock data for demonstration
-  const recentMatches = [
-    { id: 1, name: 'Sarah', destination: 'Paris', matchDate: '2024-02-15' },
-    { id: 2, name: 'Mike', destination: 'Tokyo', matchDate: '2024-02-14' },
-    { id: 3, name: 'Emma', destination: 'Rome', matchDate: '2024-02-13' }
-  ];
-
-  const upcomingEvents = [
-    { id: 1, title: 'City Tour', location: 'Barcelona', date: '2024-03-01' },
-    { id: 2, title: 'Beach Party', location: 'Bali', date: '2024-03-15' },
-    { id: 3, title: 'Mountain Hike', location: 'Swiss Alps', date: '2024-03-20' }
-  ];
-
-  const travelJournals = [
-    { id: 1, title: 'Amazing Paris Trip', date: '2024-01-20', likes: 45 },
-    { id: 2, title: 'Tokyo Adventures', date: '2024-01-15', likes: 32 },
-    { id: 3, title: 'Rome in 3 Days', date: '2024-01-10', likes: 28 }
-  ];
 
   if (!user) {
     return (
@@ -63,55 +75,53 @@ const UserDashboard = () => {
         <p className="text-gray-600 dark:text-gray-400">Your travel journey continues here</p>
       </div>
 
+      {/* Swipe Cards Section */}
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">Find Travel Buddies</h2>
+        <div className="relative h-[500px]">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+            </div>
+          ) : error ? (
+            <div className="text-red-500 text-center">{error}</div>
+          ) : potentialMatches.length === 0 ? (
+            <div className="text-center text-gray-500">
+              No more potential matches available at the moment.
+            </div>
+          ) : (
+            potentialMatches.map((match, index) => (
+              <SwipeCard
+                key={match._id}
+                user={match}
+                isTop={index === potentialMatches.length - 1}
+                onSwipe={(direction) => handleSwipe(direction, match._id)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  zIndex: index
+                }}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Recent Matches Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Recent Matches Section */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
           <div className="bg-blue-600 text-white px-4 py-3">
             <h2 className="text-xl font-semibold">Recent Matches</h2>
           </div>
           <div className="p-4">
-            {recentMatches.map(match => (
-              <div key={match.id} className="mb-4 pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
+            {potentialMatches.slice(0, 3).map(match => (
+              <div key={match._id} className="mb-4 pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
                 <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{match.name}</h3>
                 <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Destination: {match.destination}<br/>
-                  Matched on: {match.matchDate}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Upcoming Events Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-          <div className="bg-green-600 text-white px-4 py-3">
-            <h2 className="text-xl font-semibold">Upcoming Events</h2>
-          </div>
-          <div className="p-4">
-            {upcomingEvents.map(event => (
-              <div key={event.id} className="mb-4 pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{event.title}</h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Location: {event.location}<br/>
-                  Date: {event.date}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Travel Journals Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-          <div className="bg-cyan-600 text-white px-4 py-3">
-            <h2 className="text-xl font-semibold">Travel Journals</h2>
-          </div>
-          <div className="p-4">
-            {travelJournals.map(journal => (
-              <div key={journal.id} className="mb-4 pb-3 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{journal.title}</h3>
-                <p className="text-gray-600 dark:text-gray-400 text-sm">
-                  Date: {journal.date}<br/>
-                  ❤️ {journal.likes} likes
+                  Destination: {match.travelPreferences?.destination || 'Not specified'}<br/>
+                  Travel Style: {match.travelStyle || 'Not specified'}
                 </p>
               </div>
             ))}
