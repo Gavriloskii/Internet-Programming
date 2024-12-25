@@ -1,6 +1,51 @@
 const User = require('../models/User');
+const Match = require('../models/Match');
+const Swipe = require('../models/Swipe');
+const logger = require('../utils/logger');
 
 class MatchService {
+  /**
+   * Records a swipe action in the database
+   * @param {string} swiperId - ID of the user who is swiping
+   * @param {string} swipedId - ID of the user being swiped
+   * @param {string} action - The swipe action ('like' or 'reject')
+   * @returns {Promise<Object>} The created swipe record
+   */
+  async recordSwipe(swiperId, swipedId, action) {
+    try {
+      // Create new swipe record
+      const swipe = await Swipe.create({
+        swiper_id: swiperId,
+        swiped_id: swipedId,
+        action
+      });
+
+      logger.info(`Swipe recorded: ${swiperId} ${action}d ${swipedId}`);
+
+      // If both users liked each other, create a match
+      if (action === 'like') {
+        const mutualLike = await Swipe.findOne({
+          swiper_id: swipedId,
+          swiped_id: swiperId,
+          action: 'like'
+        });
+
+        if (mutualLike) {
+          await Match.create({
+            users: [swiperId, swipedId],
+            matchedAt: new Date()
+          });
+          logger.info(`Match created between users ${swiperId} and ${swipedId}`);
+        }
+      }
+
+      return swipe;
+    } catch (error) {
+      logger.error('Error in recordSwipe:', error);
+      throw error;
+    }
+  }
+
   /**
    * Calculate match score between two users based on their preferences
    * @param {Object} user1Prefs - First user's preferences

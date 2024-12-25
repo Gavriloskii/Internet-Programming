@@ -3,6 +3,8 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
+const MatchService = require('../services/matchService');
+const Swipe = require('../models/Swipe');
 
 // Rate limiting configuration
 const matchesLimiter = rateLimit({
@@ -422,6 +424,53 @@ router.get('/potential', protect, matchesLimiter, async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'Error finding potential matches',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
+// Record a swipe action
+router.post('/swipe', protect, swipeLimiter, async (req, res) => {
+    try {
+        const { swipedId, action } = req.body;
+
+        // Validate request body
+        if (!swipedId || !action || !['like', 'reject'].includes(action)) {
+            return res.status(400).json({
+                status: 'fail',
+                message: 'Invalid request. Required fields: swipedId, action (like/reject)'
+            });
+        }
+
+        // Check if swiped user exists
+        const swipedUser = await User.findById(swipedId);
+        if (!swipedUser) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'Swiped user not found'
+            });
+        }
+
+        const matchService = new MatchService();
+        const swipe = await matchService.recordSwipe(req.user.id, swipedId, action);
+
+        res.status(201).json({
+            status: 'success',
+            data: {
+                swipe
+            }
+        });
+    } catch (error) {
+        if (error.code === 11000) { // Duplicate key error
+            return res.status(400).json({
+                status: 'fail',
+                message: 'You have already swiped on this user'
+            });
+        }
+        
+        res.status(500).json({
+            status: 'error',
+            message: 'Error recording swipe',
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
