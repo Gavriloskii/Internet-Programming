@@ -60,7 +60,8 @@ router.put('/profile', protect, uploadWithLogging('profilePicture'), async (req,
         
         // Handle file upload if present
         if (req.file) {
-            updateData.profilePicture = `/uploads/${req.file.filename}`;
+            updateData.profilePicture = `/uploads/profile-pictures/${req.file.filename}`;
+            console.log('Updated profile picture path:', updateData.profilePicture);
         }
 
         // Process other fields

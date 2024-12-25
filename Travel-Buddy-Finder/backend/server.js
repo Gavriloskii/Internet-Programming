@@ -38,17 +38,53 @@ process.on('SIGINT', async () => {
 const app = express();
 const server = http.createServer(app);
 
-// Serve static files from public directory
-app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
-
-// Ensure uploads directory exists
+// Configure static file serving for uploads
 const uploadsPath = path.join(__dirname, 'public', 'uploads');
-if (!fs.existsSync(uploadsPath)) {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-}
+const profilePicsPath = path.join(uploadsPath, 'profile-pictures');
 
-// Serve static files from the public/uploads directory
-app.use('/uploads', express.static(uploadsPath));
+// Create necessary directories
+[uploadsPath, profilePicsPath].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log('Created directory:', dir);
+    }
+});
+
+// Set proper permissions for directories
+[uploadsPath, profilePicsPath].forEach(dir => {
+    try {
+        fs.chmodSync(dir, '755');
+        console.log('Set permissions for directory:', dir);
+    } catch (error) {
+        console.error('Error setting directory permissions:', error);
+    }
+});
+
+// Serve static files from the public directory
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res) => {
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.set('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
+        res.set('Cache-Control', 'no-cache');
+    }
+}));
+
+// Serve static files from the uploads directories with proper headers
+app.use('/uploads', express.static(uploadsPath, {
+    setHeaders: (res) => {
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.set('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
+        res.set('Cache-Control', 'no-cache');
+    }
+}));
+
+app.use('/uploads/profile-pictures', express.static(profilePicsPath, {
+    setHeaders: (res) => {
+        res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.set('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
+        res.set('Cache-Control', 'no-cache');
+    }
+}));
 
 // Security middleware
 app.use(cors({

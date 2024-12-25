@@ -8,10 +8,11 @@ export const updateProfile = createAsyncThunk(
     async (formData, { rejectWithValue }) => {
         try {
             const response = await apiService.users.updateProfile(formData);
-            if (!response.data.data) {
-                throw new Error('No data received from server');
+            console.log('Profile update response:', response);
+            if (!response.data || !response.data.data || !response.data.data.user) {
+                throw new Error('Invalid response format from server');
             }
-            return response.data.data;
+            return response.data.data.user;
         } catch (error) {
             console.error('Profile update error:', error);
             return rejectWithValue(error.response?.data?.message || 'Failed to update profile');
@@ -174,7 +175,7 @@ const userSlice = createSlice({
                 state.loading = false;
                 state.error = null;
             })
-            // Handle updateProfile
+// Handle updateProfile
             .addCase(updateProfile.pending, (state) => {
                 state.loading = true;
                 state.error = null;
@@ -182,7 +183,8 @@ const userSlice = createSlice({
             .addCase(updateProfile.fulfilled, (state, action) => {
                 state.loading = false;
                 state.error = null;
-                state.user = { ...state.user, ...action.payload };
+                // Update the entire user object with the response
+                state.user = action.payload;
             })
             .addCase(updateProfile.rejected, (state, action) => {
                 state.loading = false;
