@@ -68,30 +68,6 @@ const createSendToken = (user, statusCode, res) => {
     });
 };
 
-// Upload profile picture
-router.post('/upload-profile-picture', protect, upload.single('profilePicture'), async (req, res, next) => {
-    try {
-        if (!req.file) {
-            throw new AppError('Please upload a file', 400);
-        }
-
-        // Update user's profile picture in database
-        const user = await User.findByIdAndUpdate(
-            req.user.id,
-            { profilePicture: req.file.filename },
-            { new: true }
-        );
-
-        res.status(200).json({
-            status: 'success',
-            data: {
-                profilePicture: user.profilePicture
-            }
-        });
-    } catch (error) {
-        next(error);
-    }
-});
 
 // Register new user
 router.post('/signup', async (req, res, next) => {
@@ -232,7 +208,32 @@ router.post('/login', authLimiter, async (req, res, next) => {
             await user.save({ validateBeforeSave: false });
         }
 
-        createSendToken(user, 200, res);
+        // Set secure cookie with appropriate settings
+        const token = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: process.env.JWT_EXPIRES_IN }
+        );
+
+        res.cookie('jwt', token, {
+            expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            signed: true
+        });
+
+        // Remove password from output
+        user.password = undefined;
+
+        res.status(200).json({
+            status: 'success',
+            token,
+            data: {
+                user
+            }
+        });
     } catch (error) {
         next(error);
     }
@@ -298,35 +299,21 @@ router.patch('/update-password', async (req, res, next) => {
 });
 
 // Upload profile picture
-router.post('/upload-profile-picture', async (req, res, next) => {
+router.post('/upload-profile-picture', protect, upload('profilePicture'), async (req, res, next) => {
     try {
-        const uploadSingle = upload.single('profilePicture');
-        
-        uploadSingle(req, res, async (err) => {
-            if (err) {
-                return next(new AppError(err.message, 400));
-            }
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
 
-            if (!req.file) {
-                return next(new AppError('Please upload an image file', 400));
-            }
+        const fileUrl = `/uploads/${req.file.filename}`;
 
-            try {
-                const user = await verifyAndGetUser(req);
-                
-                // Update user's profile picture in database
-                user.profilePicture = `/uploads/profile-pictures/${req.file.filename}`;
-                await user.save({ validateBeforeSave: false });
+        // Update user's profile picture in database using the authenticated user's ID
+        await User.findByIdAndUpdate(req.user._id, { profilePicture: fileUrl });
 
-                res.status(200).json({
-                    status: 'success',
-                    data: {
-                        profilePicture: user.profilePicture
-                    }
-                });
-            } catch (error) {
-                next(error);
-            }
+        res.status(200).json({ 
+            status: 'success',
+            fileUrl,
+            message: 'Profile picture updated successfully' 
         });
     } catch (error) {
         next(error);

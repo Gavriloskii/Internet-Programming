@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { motion } from 'framer-motion';
 import {
-    GlobeAltIcon,
-    UserIcon,
-    CalendarIcon,
     MapPinIcon,
-    LanguageIcon,
     PencilIcon,
     CameraIcon,
     CheckIcon,
     XMarkIcon
 } from '@heroicons/react/24/outline';
 import { updateProfile, selectUser } from '../redux/userSlice';
+import axios from 'axios';
 
 const TravelProfile = () => {
     const dispatch = useDispatch();
@@ -40,7 +36,26 @@ const TravelProfile = () => {
 
     const handleSave = async () => {
         try {
-            await dispatch(updateProfile(editedProfile)).unwrap();
+            const formData = new FormData();
+            
+            // If there's a new profile picture, append it
+            if (editedProfile.avatar) {
+                formData.append('profilePicture', editedProfile.avatar);
+            }
+
+            // Append other profile data
+            Object.keys(editedProfile).forEach(key => {
+                if (key !== 'avatar') {
+                    if (typeof editedProfile[key] === 'object') {
+                        formData.append(key, JSON.stringify(editedProfile[key]));
+                    } else {
+                        formData.append(key, editedProfile[key]);
+                    }
+                }
+            });
+
+            // Update profile with FormData
+            await dispatch(updateProfile(formData)).unwrap();
             setIsEditing(false);
         } catch (error) {
             console.error('Failed to update profile:', error);
@@ -50,9 +65,20 @@ const TravelProfile = () => {
     const handleImageUpload = (event) => {
         const file = event.target.files[0];
         if (file) {
-            const formData = new FormData();
-            formData.append('avatar', file);
-            // Handle image upload logic here
+            setEditedProfile(prev => ({
+                ...prev,
+                avatar: file
+            }));
+
+            // Show preview
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const previewImg = document.querySelector('#profile-preview');
+                if (previewImg) {
+                    previewImg.src = reader.result;
+                }
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -80,9 +106,10 @@ const TravelProfile = () => {
                 <div className="absolute -bottom-16 left-8">
                     <div className="relative">
                         <img
+                            id="profile-preview"
                             src={user?.avatar || 'https://via.placeholder.com/128'}
                             alt={user?.name}
-                            className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800"
+                            className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 object-cover"
                         />
                         {isEditing && (
                             <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer">

@@ -1,36 +1,35 @@
-const multer = require('multer');
-const path = require('path');
-const { AppError } = require('./errorHandler');
+const upload = require('../utils/uploadConfig');
 
-// Configure multer storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'public/uploads/profile-pictures');
-    },
-    filename: (req, file, cb) => {
-        // Create unique filename with timestamp
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'profile-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
+// Create a wrapper middleware that adds logging
+const uploadWithLogging = (fieldName) => {
+    return (req, res, next) => {
+        const middleware = upload.single(fieldName);
+        
+        middleware(req, res, (err) => {
+            if (err) {
+                console.error('File upload error:', err);
+                return next(err);
+            }
 
-// File filter
-const fileFilter = (req, file, cb) => {
-    // Accept only image files
-    if (file.mimetype.startsWith('image/')) {
-        cb(null, true);
-    } else {
-        cb(new AppError('Please upload only image files.', 400), false);
-    }
+            // Log file details if a file was uploaded
+            if (req.file) {
+                console.log('File upload successful:', {
+                    fieldname: req.file.fieldname,
+                    originalname: req.file.originalname,
+                    encoding: req.file.encoding,
+                    mimetype: req.file.mimetype,
+                    destination: req.file.destination,
+                    filename: req.file.filename,
+                    path: req.file.path,
+                    size: req.file.size
+                });
+            } else {
+                console.log('No file uploaded');
+            }
+            
+            next();
+        });
+    };
 };
 
-// Configure multer upload
-const upload = multer({
-    storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
-    },
-    fileFilter: fileFilter
-});
-
-module.exports = upload;
+module.exports = uploadWithLogging;

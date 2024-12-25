@@ -21,6 +21,7 @@ const createTestUser = async () => {
             name: 'Test User',
             email: 'test.user@example.com',
             password: 'Test@User123',  // Updated to meet all requirements
+            passwordConfirm: 'Test@User123', // Added password confirmation
             verified: true,
             travelPreferences: {
                 budget: 'moderate',

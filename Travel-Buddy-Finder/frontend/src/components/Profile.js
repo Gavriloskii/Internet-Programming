@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import authService from '../services/api';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateProfile, selectUser, selectLoading, selectError } from '../redux/userSlice';
+import apiService from '../services/api';
 
 const Profile = () => {
-    const [profile, setProfile] = useState(null);
+    const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const loading = useSelector(selectLoading);
+    const reduxError = useSelector(selectError);
+    
     const [imagePreview, setImagePreview] = useState(null);
     const fileInputRef = useRef(null);
     const [isEditing, setIsEditing] = useState(false);
@@ -16,23 +22,15 @@ const Profile = () => {
     const [success, setSuccess] = useState('');
 
     useEffect(() => {
-        const fetchProfile = async () => {
-            try {
-                const userData = await authService.getProfile();
-                setProfile(userData);
-                setFormData({
-                    bio: userData.bio || '',
-                    interests: userData.interests || '',
-                    travelPreferences: userData.travelPreferences || '',
-                    languages: userData.languages || ''
-                });
-            } catch (err) {
-                setError('Failed to load profile data');
-            }
-        };
-
-        fetchProfile();
-    }, []);
+        if (user) {
+            setFormData({
+                bio: user.bio || '',
+                interests: user.interests || '',
+                travelPreferences: user.travelPreferences || '',
+                languages: user.languages || ''
+            });
+        }
+    }, [user]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -48,26 +46,13 @@ const Profile = () => {
         setSuccess('');
 
         try {
-            // TODO: Implement updateProfile in authService
-            // await authService.updateProfile(formData);
-            setProfile(prev => ({
-                ...prev,
-                ...formData
-            }));
+            await dispatch(updateProfile(formData)).unwrap();
             setSuccess('Profile updated successfully');
             setIsEditing(false);
         } catch (err) {
-            setError('Failed to update profile');
+            setError(err || 'Failed to update profile');
         }
     };
-
-    if (!profile) {
-        return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            </div>
-        );
-    }
 
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
@@ -84,18 +69,23 @@ const Profile = () => {
         try {
             const formData = new FormData();
             formData.append('profilePicture', file);
-            const response = await authService.users.uploadProfilePicture(formData);
+            const response = await apiService.users.uploadProfilePicture(formData);
             if (response.data?.data?.profilePicture) {
-                setProfile(prev => ({
-                    ...prev,
-                    profilePicture: response.data.data.profilePicture
-                }));
+                dispatch(updateProfile({ profilePicture: response.data.data.profilePicture }));
                 setSuccess('Profile picture updated successfully');
             }
         } catch (err) {
             setError('Failed to upload profile picture');
         }
     };
+
+    if (!user) {
+        return (
+            <div className="flex justify-center items-center h-64">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="max-w-2xl mx-auto">
@@ -104,7 +94,7 @@ const Profile = () => {
                     <div className="relative mb-4">
                         <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-gray-200">
                             <img 
-                                src={imagePreview || (profile?.profilePicture ? `${process.env.REACT_APP_API_URL}${profile.profilePicture}` : '/default-avatar.png')}
+                                src={imagePreview || (user?.profilePicture ? `${process.env.REACT_APP_API_URL}${user.profilePicture}` : '/default-avatar.png')}
                                 alt="Profile" 
                                 className="w-full h-full object-cover"
                             />
@@ -133,13 +123,14 @@ const Profile = () => {
                     <button
                         onClick={() => setIsEditing(!isEditing)}
                         className="btn-secondary"
+                        disabled={loading}
                     >
                         {isEditing ? 'Cancel' : 'Edit Profile'}
                     </button>
                 </div>
 
-                {error && (
-                    <div className="error-message mb-4">{error}</div>
+                {(error || reduxError) && (
+                    <div className="error-message mb-4">{error || reduxError}</div>
                 )}
                 {success && (
                     <div className="success-message mb-4">{success}</div>
@@ -155,6 +146,7 @@ const Profile = () => {
                                 onChange={handleInputChange}
                                 className="input-field h-32"
                                 placeholder="Tell us about yourself..."
+                                disabled={loading}
                             />
                         </div>
 
@@ -167,6 +159,7 @@ const Profile = () => {
                                 onChange={handleInputChange}
                                 className="input-field"
                                 placeholder="e.g., Hiking, Photography, Food"
+                                disabled={loading}
                             />
                         </div>
 
@@ -179,6 +172,7 @@ const Profile = () => {
                                 onChange={handleInputChange}
                                 className="input-field"
                                 placeholder="e.g., Adventure, Luxury, Budget"
+                                disabled={loading}
                             />
                         </div>
 
@@ -191,33 +185,38 @@ const Profile = () => {
                                 onChange={handleInputChange}
                                 className="input-field"
                                 placeholder="e.g., English, Spanish, French"
+                                disabled={loading}
                             />
                         </div>
 
-                        <button type="submit" className="btn-primary w-full">
-                            Save Changes
+                        <button 
+                            type="submit" 
+                            className="btn-primary w-full"
+                            disabled={loading}
+                        >
+                            {loading ? 'Saving...' : 'Save Changes'}
                         </button>
                     </form>
                 ) : (
                     <div className="space-y-6">
                         <div>
                             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Bio</h2>
-                            <p className="mt-2 text-gray-600 dark:text-gray-400">{profile.bio || 'No bio added yet'}</p>
+                            <p className="mt-2 text-gray-600 dark:text-gray-400">{user.bio || 'No bio added yet'}</p>
                         </div>
 
                         <div>
                             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Interests</h2>
-                            <p className="mt-2 text-gray-600 dark:text-gray-400">{profile.interests || 'No interests added yet'}</p>
+                            <p className="mt-2 text-gray-600 dark:text-gray-400">{user.interests || 'No interests added yet'}</p>
                         </div>
 
                         <div>
                             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Travel Preferences</h2>
-                            <p className="mt-2 text-gray-600 dark:text-gray-400">{profile.travelPreferences || 'No preferences added yet'}</p>
+                            <p className="mt-2 text-gray-600 dark:text-gray-400">{user.travelPreferences || 'No preferences added yet'}</p>
                         </div>
 
                         <div>
                             <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">Languages</h2>
-                            <p className="mt-2 text-gray-600 dark:text-gray-400">{profile.languages || 'No languages added yet'}</p>
+                            <p className="mt-2 text-gray-600 dark:text-gray-400">{user.languages || 'No languages added yet'}</p>
                         </div>
                     </div>
                 )}

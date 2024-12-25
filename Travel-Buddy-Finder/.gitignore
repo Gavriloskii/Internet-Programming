@@ -1,1 +1,13 @@
-node_modules
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+
+# Environment variables
+.env
+.env.test
+
+# Uploads directory
+uploads/

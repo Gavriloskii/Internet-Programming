@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import UserDashboard from './pages/UserDashboard'; // Importing UserDashboard
 import { Provider, useSelector } from 'react-redux';
+import UserProfile from './pages/UserProfile';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
 import { selectIsAuthenticated, selectLoading } from './redux/userSlice';
@@ -98,6 +99,7 @@ const App = () => {
                         <Route path="forum" element={<ForumPage />} />
                         <Route path="itinerary" element={<ItineraryPage />} />
                         <Route path="dashboard" element={<UserDashboard />} />
+                        <Route path="user-profile" element={<UserProfile />} />
                     </Route>
                     <Route
                         path="*"

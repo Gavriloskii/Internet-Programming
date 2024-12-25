@@ -16,6 +16,33 @@ const api = axios.create({
     }
 });
 
+// Add response interceptor to handle auth errors
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        if (error.response?.status === 401) {
+            // Clear any stored auth data
+            document.cookie = 'jwt=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
+// Add request interceptor to handle auth token
+api.interceptors.request.use(
+    (config) => {
+        const token = document.cookie.split('; ').find(row => row.startsWith('jwt='));
+        if (token) {
+            config.headers.Authorization = `Bearer ${token.split('=')[1]}`;
+        }
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
 // Auth endpoints
 export const auth = {
     login: async (credentials) => {
@@ -43,7 +70,14 @@ export const chat = {
 // User endpoints
 export const users = {
     getProfile: () => api.get('/users/profile'),
-    updateProfile: (data) => api.put('/users/profile', data),
+    updateProfile: (formData) => {
+        const config = {
+            headers: {
+                'Content-Type': formData instanceof FormData ? 'multipart/form-data' : 'application/json'
+            }
+        };
+        return api.put('/users/profile', formData, config);
+    },
     updatePreferences: (preferences) => api.put('/users/preferences', preferences),
     uploadProfilePicture: (formData) => api.post('/auth/upload-profile-picture', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }

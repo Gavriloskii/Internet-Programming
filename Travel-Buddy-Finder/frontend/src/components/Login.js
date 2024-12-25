@@ -44,31 +44,10 @@ const Login = () => {
         e.preventDefault();
         setLocalError('');
 
-        // Get failed attempts from sessionStorage (more secure than localStorage)
-        const failedAttempts = parseInt(sessionStorage.getItem('failedLoginAttempts') || '0');
-        if (failedAttempts >= 5) {
-            const lastAttemptTime = parseInt(sessionStorage.getItem('lastLoginAttempt') || '0');
-            const cooldownPeriod = 5 * 60 * 1000; // 5 minutes in milliseconds
-            
-            if (Date.now() - lastAttemptTime < cooldownPeriod) {
-                const remainingTime = Math.ceil((cooldownPeriod - (Date.now() - lastAttemptTime)) / 60000);
-                setLocalError(`Too many failed attempts. Please try again in ${remainingTime} minutes.`);
-                return;
-            } else {
-                // Reset after cooldown period
-                sessionStorage.setItem('failedLoginAttempts', '0');
-                sessionStorage.setItem('lastLoginAttempt', '0');
-            }
-        }
-
         try {
             const resultAction = await dispatch(loginUser({ email, password }));
             
             if (loginUser.fulfilled.match(resultAction)) {
-                // Reset failed attempts on successful login
-                sessionStorage.setItem('failedLoginAttempts', '0');
-                sessionStorage.setItem('lastLoginAttempt', '0');
-
                 // Show success message and navigate
                 const successMessage = document.createElement('div');
                 successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
@@ -80,21 +59,10 @@ const Login = () => {
                     successMessage.remove();
                     navigate('/app/swipe');
                 }, 1500);
-            } else if (loginUser.rejected.match(resultAction)) {
-                // Increment failed attempts
-                const newFailedAttempts = failedAttempts + 1;
-                sessionStorage.setItem('failedLoginAttempts', newFailedAttempts.toString());
-                sessionStorage.setItem('lastLoginAttempt', Date.now().toString());
-
-                if (newFailedAttempts >= 5) {
-                    setLocalError('Too many failed attempts. Please try again in 5 minutes.');
-                } else {
-                    setLocalError(`Invalid credentials. ${5 - newFailedAttempts} attempts remaining.`);
-                }
             }
         } catch (err) {
             console.error('Login error:', err);
-            setLocalError('An unexpected error occurred. Please try again.');
+            setLocalError(err.response?.data?.message || 'An unexpected error occurred. Please try again.');
         }
     };
 

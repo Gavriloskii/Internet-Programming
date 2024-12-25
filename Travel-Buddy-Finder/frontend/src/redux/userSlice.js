@@ -1,6 +1,23 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { auth } from '../services/api';
+import { auth, apiService } from '../services/api';
 import Cookies from 'js-cookie'; // Import js-cookie for cookie management
+
+// Async thunk for updating profile
+export const updateProfile = createAsyncThunk(
+    'user/updateProfile',
+    async (formData, { rejectWithValue }) => {
+        try {
+            const response = await apiService.users.updateProfile(formData);
+            if (!response.data.data) {
+                throw new Error('No data received from server');
+            }
+            return response.data.data;
+        } catch (error) {
+            console.error('Profile update error:', error);
+            return rejectWithValue(error.response?.data?.message || 'Failed to update profile');
+        }
+    }
+);
 
 // Initial state
 const initialState = {
@@ -40,7 +57,7 @@ export const loginUser = createAsyncThunk(
                 throw new Error('No user data received');
             }
             // Set the token in cookies
-            Cookies.set('jwt', response.data.data.token); // Assuming the token is in response.data.data.token
+            Cookies.set('jwt', response.data.data.token);
             return response.data.data.user;
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || 'Login failed');
@@ -53,7 +70,7 @@ export const logoutUser = createAsyncThunk(
     async (_, { rejectWithValue }) => {
         try {
             await auth.logout();
-            Cookies.remove('jwt'); // Remove the token from cookies on logout
+            Cookies.remove('jwt');
         } catch (error) {
             return rejectWithValue(error.response?.data?.message || 'Logout failed');
         }
@@ -84,9 +101,6 @@ const userSlice = createSlice({
             state.isAuthenticated = false;
             state.loading = false;
             state.error = null;
-        },
-        updateProfile: (state, action) => {
-            state.user = { ...state.user, ...action.payload };
         },
         updatePreferences: (state, action) => {
             state.user = {
@@ -159,6 +173,20 @@ const userSlice = createSlice({
                 state.isAuthenticated = false;
                 state.loading = false;
                 state.error = null;
+            })
+            // Handle updateProfile
+            .addCase(updateProfile.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(updateProfile.fulfilled, (state, action) => {
+                state.loading = false;
+                state.error = null;
+                state.user = { ...state.user, ...action.payload };
+            })
+            .addCase(updateProfile.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload;
             });
     }
 });
@@ -169,7 +197,6 @@ export const {
     login,
     loginFailure,
     logout,
-    updateProfile,
     updatePreferences,
     addMatch,
     removeMatch,
