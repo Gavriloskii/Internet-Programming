@@ -1,5 +1,6 @@
 import store from '../redux/store';
 import { handleNewMessage, setTypingStatus, updateOnlineStatus } from '../redux/chatSlice';
+import { showMatchNotification } from '../redux/notificationsSlice';
 import BaseSocketService from './base/BaseSocketService';
 import { SOCKET_EVENTS, SOCKET_CONFIG, SOCKET_URLS } from './constants/socketConstants';
 
@@ -39,6 +40,30 @@ class SocketService extends BaseSocketService {
 
         this.on(SOCKET_EVENTS.PRESENCE, ({ userId, status }) => {
             store.dispatch(updateOnlineStatus({ userId, isOnline: status === 'online' }));
+        });
+
+        // Handle match notifications
+        this.on(SOCKET_EVENTS.MATCH, async (matchData) => {
+            try {
+                // Fetch matched user details
+                const response = await fetch(`/api/users/${matchData.users.find(id => id !== store.getState().user.id)}`);
+                const matchedUser = await response.json();
+                
+                // Dispatch notification with user details
+                store.dispatch(showMatchNotification({
+                    matchId: matchData.matchId,
+                    userName: matchedUser.name,
+                    matchScore: matchData.matchScore,
+                    userId: matchedUser._id
+                }));
+
+                // Play notification sound from CDN
+                const audio = new Audio('https://cdn.jsdelivr.net/gh/freeCodeCamp/cdn@2b5013f/build/audio/beep.mp3');
+                audio.volume = 0.5; // Set volume to 50%
+                audio.play().catch(err => console.log('Audio playback failed:', err));
+            } catch (error) {
+                console.error('Error handling match notification:', error);
+            }
         });
     }
 

@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Match = require('../models/Match');
 const Swipe = require('../models/Swipe');
 const logger = require('../utils/logger');
+const socketService = require('./socketService');
 
 class MatchService {
   /**
@@ -56,6 +57,13 @@ class MatchService {
           });
 
           logger.info(`Mutual match created between users ${swiperId} and ${swipedId} with score ${matchScore}`);
+
+          // Notify both users about the match through socket
+          socketService.notifyMatch({
+            matchId: match._id,
+            users: [swiperId, swipedId],
+            matchScore: matchScore
+          });
 
           return {
             swipe,

@@ -1,52 +1,31 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const initialState = {
-    notifications: [],
-    unreadCount: 0
-};
-
 const notificationsSlice = createSlice({
-    name: 'notifications',
-    initialState,
-    reducers: {
-        addNotification: (state, action) => {
-            state.notifications.unshift({
-                ...action.payload,
-                unread: true,
-                timestamp: new Date().toISOString()
-            });
-            state.unreadCount += 1;
-        },
-        markAsRead: (state, action) => {
-            const notificationId = action.payload;
-            const notification = state.notifications.find(n => n.id === notificationId);
-            if (notification && notification.unread) {
-                notification.unread = false;
-                state.unreadCount = Math.max(0, state.unreadCount - 1);
-            }
-        },
-        markAllAsRead: (state) => {
-            state.notifications.forEach(notification => {
-                notification.unread = false;
-            });
-            state.unreadCount = 0;
-        },
-        clearNotifications: (state) => {
-            state.notifications = [];
-            state.unreadCount = 0;
-        }
+  name: 'notifications',
+  initialState: {
+    matchNotifications: [],
+  },
+  reducers: {
+    showMatchNotification: (state, action) => {
+      state.matchNotifications.push(action.payload);
+    },
+    removeMatchNotification: (state, action) => {
+      state.matchNotifications = state.matchNotifications.filter(
+        notification => notification.matchId !== action.payload
+      );
+    },
+    clearAllNotifications: (state) => {
+      state.matchNotifications = [];
     }
+  }
 });
 
 export const {
-    addNotification,
-    markAsRead,
-    markAllAsRead,
-    clearNotifications
+  showMatchNotification,
+  removeMatchNotification,
+  clearAllNotifications
 } = notificationsSlice.actions;
 
-export const selectNotifications = (state) => state.notifications.notifications;
-export const selectUnreadCount = (state) => state.notifications.unreadCount;
-export const selectHasUnread = (state) => state.notifications.unreadCount > 0;
+export const selectMatchNotifications = (state) => state.notifications.matchNotifications;
 
 export default notificationsSlice.reducer;

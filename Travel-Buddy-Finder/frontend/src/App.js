@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
-import UserDashboard from './pages/UserDashboard'; // Importing UserDashboard
+import UserDashboard from './pages/UserDashboard';
 import { Provider, useSelector } from 'react-redux';
+import MatchNotification from './components/MatchNotification';
 import UserProfile from './pages/UserProfile';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
 import { selectIsAuthenticated, selectLoading } from './redux/userSlice';
+import { removeMatchNotification } from './redux/notificationsSlice';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -44,6 +46,24 @@ const ProtectedRoute = ({ children }) => {
     }
 
     return children;
+};
+
+const NotificationHandler = () => {
+    const matchNotifications = useSelector(state => state.notifications.matchNotifications);
+    
+    return (
+        <>
+            {matchNotifications.map((notification) => (
+                <MatchNotification
+                    key={notification.matchId}
+                    match={notification}
+                    onClose={() => {
+                        store.dispatch(removeMatchNotification(notification.matchId));
+                    }}
+                />
+            ))}
+        </>
+    );
 };
 
 const App = () => {
@@ -126,7 +146,8 @@ const App = () => {
                         }
                     />
                 </Routes>
-                <TestRedux /> {/* Adding TestRedux component here */}
+                <TestRedux />
+                <NotificationHandler />
             </BrowserRouter>
         </Provider>
     );
