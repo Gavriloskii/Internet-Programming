@@ -1,0 +1,30 @@
+2024-12-25T19:29:33.714Z info: Swipe recorded: 676c5d1d3c644609f3b6c5da liked 676c5d1d3c644609f3b6c5dd
+2024-12-25T19:29:33.727Z info: Swipe recorded: 676c5d1d3c644609f3b6c5dd liked 676c5d1d3c644609f3b6c5da
+2024-12-25T19:29:33.742Z error: Error in recordSwipe: this.calculateMatchScore is not a function
+2024-12-25T19:29:34.152Z info: Swipe recorded: 676c5d1d3c644609f3b6c5ed liked 676c5d1d3c644609f3b6c5f0
+2024-12-25T19:29:34.157Z info: Swipe recorded: 676c5d1d3c644609f3b6c5f0 rejectd 676c5d1d3c644609f3b6c5ed
+2024-12-25T19:29:34.573Z info: Swipe recorded: 676c5d1e3c644609f3b6c5fc liked 676c5d1e3c644609f3b6c5ff
+2024-12-25T19:29:34.579Z info: Swipe recorded: 676c5d1e3c644609f3b6c5ff liked 676c5d1e3c644609f3b6c5fc
+2024-12-25T19:29:34.587Z error: Error in recordSwipe: this.calculateMatchScore is not a function
+2024-12-25T19:29:34.993Z info: Swipe recorded: 676c5d1e3c644609f3b6c60f liked 676c5d1e3c644609f3b6c612
+2024-12-25T19:29:35.003Z error: Error in recordSwipe: E11000 duplicate key error collection: travel-buddy-test.swipes index: swiper_id_1_swiped_id_1 dup key: { swiper_id: ObjectId('676c5d1e3c644609f3b6c60f'), swiped_id: ObjectId('676c5d1e3c644609f3b6c612') }
+2024-12-25T19:30:24.035Z info: Swipe recorded: 676c5d4fa90bb7079de9c9e1 liked 676c5d4fa90bb7079de9c9e4
+2024-12-25T19:30:24.047Z info: Swipe recorded: 676c5d4fa90bb7079de9c9e4 liked 676c5d4fa90bb7079de9c9e1
+2024-12-25T19:30:24.063Z info: Mutual match created between users 676c5d4fa90bb7079de9c9e4 and 676c5d4fa90bb7079de9c9e1 with score 0.8
+2024-12-25T19:30:24.493Z info: Swipe recorded: 676c5d50a90bb7079de9c9f6 liked 676c5d50a90bb7079de9c9f9
+2024-12-25T19:30:24.500Z info: Swipe recorded: 676c5d50a90bb7079de9c9f9 rejectd 676c5d50a90bb7079de9c9f6
+2024-12-25T19:30:24.928Z info: Swipe recorded: 676c5d50a90bb7079de9ca05 liked 676c5d50a90bb7079de9ca08
+2024-12-25T19:30:24.934Z info: Swipe recorded: 676c5d50a90bb7079de9ca08 liked 676c5d50a90bb7079de9ca05
+2024-12-25T19:30:24.946Z info: Mutual match created between users 676c5d50a90bb7079de9ca08 and 676c5d50a90bb7079de9ca05 with score 0.8
+2024-12-25T19:30:25.357Z info: Swipe recorded: 676c5d50a90bb7079de9ca1a liked 676c5d51a90bb7079de9ca1d
+2024-12-25T19:30:25.367Z error: Error in recordSwipe: E11000 duplicate key error collection: travel-buddy-test.swipes index: swiper_id_1_swiped_id_1 dup key: { swiper_id: ObjectId('676c5d50a90bb7079de9ca1a'), swiped_id: ObjectId('676c5d51a90bb7079de9ca1d') }
+2024-12-25T19:31:22.546Z info: Swipe recorded: 676c5d8ad39172ccad5c38b2 liked 676c5d8ad39172ccad5c38b5
+2024-12-25T19:31:22.559Z info: Swipe recorded: 676c5d8ad39172ccad5c38b5 liked 676c5d8ad39172ccad5c38b2
+2024-12-25T19:31:22.574Z info: Mutual match created between users 676c5d8ad39172ccad5c38b5 and 676c5d8ad39172ccad5c38b2 with score 80
+2024-12-25T19:31:22.991Z info: Swipe recorded: 676c5d8ad39172ccad5c38c7 liked 676c5d8ad39172ccad5c38ca
+2024-12-25T19:31:22.997Z info: Swipe recorded: 676c5d8ad39172ccad5c38ca rejectd 676c5d8ad39172ccad5c38c7
+2024-12-25T19:31:23.407Z info: Swipe recorded: 676c5d8bd39172ccad5c38d6 liked 676c5d8bd39172ccad5c38d9
+2024-12-25T19:31:23.413Z info: Swipe recorded: 676c5d8bd39172ccad5c38d9 liked 676c5d8bd39172ccad5c38d6
+2024-12-25T19:31:23.426Z info: Mutual match created between users 676c5d8bd39172ccad5c38d9 and 676c5d8bd39172ccad5c38d6 with score 80
+2024-12-25T19:31:23.836Z info: Swipe recorded: 676c5d8bd39172ccad5c38eb liked 676c5d8bd39172ccad5c38ee
+2024-12-25T19:31:23.845Z error: Error in recordSwipe: E11000 duplicate key error collection: travel-buddy-test.swipes index: swiper_id_1_swiped_id_1 dup key: { swiper_id: ObjectId('676c5d8bd39172ccad5c38eb'), swiped_id: ObjectId('676c5d8bd39172ccad5c38ee') }

@@ -22,7 +22,7 @@ class MatchService {
 
       logger.info(`Swipe recorded: ${swiperId} ${action}d ${swipedId}`);
 
-      // If both users liked each other, create a match
+      // If action is like, check for mutual match
       if (action === 'like') {
         const mutualLike = await Swipe.findOne({
           swiper_id: swipedId,
@@ -31,15 +31,44 @@ class MatchService {
         });
 
         if (mutualLike) {
-          await Match.create({
+          // Get both users for score calculation
+          const [user1, user2] = await Promise.all([
+            User.findById(swiperId),
+            User.findById(swipedId)
+          ]);
+
+          // Calculate match score using the static method
+          const matchScore = MatchService.calculateMatchScore(user1, user2);
+
+          // Create match with score and metadata
+          const match = await Match.create({
             users: [swiperId, swipedId],
-            matchedAt: new Date()
+            matchScore,
+            matchedOn: new Date(),
+            status: 'pending',
+            notificationStatus: 'pending',
+            matchInitiatedBy: swiperId,
+            metadata: {
+              matchType: 'mutual',
+              swipeTime: Date.now(),
+              initialMessageSent: false
+            }
           });
-          logger.info(`Match created between users ${swiperId} and ${swipedId}`);
+
+          logger.info(`Mutual match created between users ${swiperId} and ${swipedId} with score ${matchScore}`);
+
+          return {
+            swipe,
+            match,
+            isMutualMatch: true
+          };
         }
       }
 
-      return swipe;
+      return {
+        swipe,
+        isMutualMatch: false
+      };
     } catch (error) {
       logger.error('Error in recordSwipe:', error);
       throw error;
@@ -56,27 +85,27 @@ class MatchService {
     let score = 0;
     let totalWeight = 0;
 
-    // Budget match (weight: 0.2)
+    // Budget match (weight: 20)
     if (user1Prefs.travelPreferences?.budget && user2Prefs.travelPreferences?.budget) {
-      const weight = 0.2;
+      const weight = 20;
       totalWeight += weight;
       if (user1Prefs.travelPreferences.budget === user2Prefs.travelPreferences.budget) {
         score += weight;
       }
     }
 
-    // Pace match (weight: 0.2)
+    // Pace match (weight: 20)
     if (user1Prefs.travelPreferences?.pace && user2Prefs.travelPreferences?.pace) {
-      const weight = 0.2;
+      const weight = 20;
       totalWeight += weight;
       if (user1Prefs.travelPreferences.pace === user2Prefs.travelPreferences.pace) {
         score += weight;
       }
     }
 
-    // Interests match (weight: 0.4)
+    // Interests match (weight: 40)
     if (user1Prefs.travelPreferences?.interests && user2Prefs.travelPreferences?.interests) {
-      const weight = 0.4;
+      const weight = 40;
       totalWeight += weight;
       const commonInterests = user1Prefs.travelPreferences.interests.filter(interest =>
         user2Prefs.travelPreferences.interests.includes(interest)
@@ -87,9 +116,9 @@ class MatchService {
       );
     }
 
-    // Accommodation preference match (weight: 0.2)
+    // Accommodation preference match (weight: 20)
     if (user1Prefs.travelPreferences?.accommodationPreference && user2Prefs.travelPreferences?.accommodationPreference) {
-      const weight = 0.2;
+      const weight = 20;
       totalWeight += weight;
       if (user1Prefs.travelPreferences.accommodationPreference === user2Prefs.travelPreferences.accommodationPreference ||
           user1Prefs.travelPreferences.accommodationPreference === 'flexible' ||
@@ -98,7 +127,8 @@ class MatchService {
       }
     }
 
-    return totalWeight > 0 ? score / totalWeight : 0;
+    // Return score as a percentage (0-100)
+    return Math.round(totalWeight > 0 ? score : 0);
   }
 
   /**

@@ -6,6 +6,16 @@ const matchSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     }],
+    notificationStatus: {
+        type: String,
+        enum: ['pending', 'sent', 'read'],
+        default: 'pending'
+    },
+    matchInitiatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     matchScore: {
         type: Number,
         required: true,

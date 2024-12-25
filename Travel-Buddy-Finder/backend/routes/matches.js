@@ -452,14 +452,37 @@ router.post('/swipe', protect, swipeLimiter, async (req, res) => {
         }
 
         const matchService = new MatchService();
-        const swipe = await matchService.recordSwipe(req.user.id, swipedId, action);
+        const result = await matchService.recordSwipe(req.user.id, swipedId, action);
 
-        res.status(201).json({
-            status: 'success',
-            data: {
-                swipe
-            }
-        });
+        if (result.isMutualMatch) {
+            // Return enhanced response for mutual match
+            res.status(201).json({
+                status: 'success',
+                data: {
+                    swipe: result.swipe,
+                    match: result.match,
+                    isMutualMatch: true,
+                    matchDetails: {
+                        matchScore: result.match.matchScore,
+                        matchedUser: {
+                            id: swipedUser._id,
+                            name: swipedUser.name,
+                            profilePicture: swipedUser.profilePicture
+                        }
+                    }
+                },
+                message: "It's a match! You both liked each other."
+            });
+        } else {
+            // Return normal response for regular swipe
+            res.status(201).json({
+                status: 'success',
+                data: {
+                    swipe: result.swipe,
+                    isMutualMatch: false
+                }
+            });
+        }
     } catch (error) {
         if (error.code === 11000) { // Duplicate key error
             return res.status(400).json({
