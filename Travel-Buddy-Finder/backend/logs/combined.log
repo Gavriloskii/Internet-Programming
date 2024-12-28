@@ -38,3 +38,13 @@
 2024-12-28T15:37:20.879Z info: Mutual match created between users 67701b30f340dba7be81382a and 67701b30f340dba7be813827 with score 80
 2024-12-28T15:37:21.304Z info: Swipe recorded: 67701b30f340dba7be81383c liked 67701b31f340dba7be81383f
 2024-12-28T15:37:21.318Z error: Error in recordSwipe: E11000 duplicate key error collection: travel-buddy-test.swipes index: swiper_id_1_swiped_id_1 dup key: { swiper_id: ObjectId('67701b30f340dba7be81383c'), swiped_id: ObjectId('67701b31f340dba7be81383f') }
+2024-12-28T17:41:25.157Z info: Swipe recorded: 6770384454365a72b8f6363f liked 6770384454365a72b8f6364a
+2024-12-28T17:41:25.172Z info: Swipe recorded: 6770384454365a72b8f6364a liked 6770384454365a72b8f6363f
+2024-12-28T17:41:25.200Z info: Mutual match created between users 6770384454365a72b8f6364a and 6770384454365a72b8f6363f with score 80
+2024-12-28T17:41:26.147Z info: Swipe recorded: 6770384554365a72b8f6365c liked 6770384554365a72b8f6365f
+2024-12-28T17:41:26.159Z info: Swipe recorded: 6770384554365a72b8f6365f rejectd 6770384554365a72b8f6365c
+2024-12-28T17:41:27.116Z info: Swipe recorded: 6770384654365a72b8f6366b liked 6770384654365a72b8f6366e
+2024-12-28T17:41:27.131Z info: Swipe recorded: 6770384654365a72b8f6366e liked 6770384654365a72b8f6366b
+2024-12-28T17:41:27.155Z info: Mutual match created between users 6770384654365a72b8f6366e and 6770384654365a72b8f6366b with score 80
+2024-12-28T17:41:28.099Z info: Swipe recorded: 6770384754365a72b8f63680 liked 6770384754365a72b8f63683
+2024-12-28T17:41:28.119Z error: Error in recordSwipe: E11000 duplicate key error collection: travel-buddy-test.swipes index: swiper_id_1_swiped_id_1 dup key: { swiper_id: ObjectId('6770384754365a72b8f63680'), swiped_id: ObjectId('6770384754365a72b8f63683') }

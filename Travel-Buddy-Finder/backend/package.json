@@ -17,7 +17,7 @@
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "csurf": "^1.11.0",
+    "csurf": "^1.2.2",
     "express": "^4.21.2",
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^6.11.2",
@@ -38,7 +38,7 @@
     "eslint": "^8.38.0",
     "jest": "^29.7.0",
     "mongodb-memory-server": "^10.1.2",
-    "nodemon": "^2.0.22",
+    "nodemon": "^3.1.9",
     "socket.io-client": "^4.8.1",
     "supertest": "^6.3.4"
   },
