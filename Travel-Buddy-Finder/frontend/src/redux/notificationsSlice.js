@@ -14,8 +14,23 @@ const notificationsSlice = createSlice({
         notification => notification.matchId !== action.payload
       );
     },
-    clearAllNotifications: (state) => {
+    markAsRead: (state, action) => {
+      const { id } = action.payload;
+      const notification = state.matchNotifications.find(notification => notification.id === id);
+      if (notification) {
+        notification.read = true;
+      }
+    },
+    markAllAsRead: (state) => {
+      state.matchNotifications.forEach(notification => {
+        notification.read = true;
+      });
+    },
+    clearAllNotifications: (state) => {  
       state.matchNotifications = [];
+    },
+    addNotification: (state, action) => {
+      state.matchNotifications.push(action.payload);
     }
   }
 });
@@ -23,9 +38,15 @@ const notificationsSlice = createSlice({
 export const {
   showMatchNotification,
   removeMatchNotification,
-  clearAllNotifications
+  clearAllNotifications,
+  markAsRead,
+  markAllAsRead,
+  addNotification
 } = notificationsSlice.actions;
 
-export const selectMatchNotifications = (state) => state.notifications.matchNotifications;
+export const selectNotifications = (state) => state.notifications.matchNotifications;
+
+export const selectHasUnread = (state) => 
+  state.notifications.matchNotifications.some(notification => !notification.read);
 
 export default notificationsSlice.reducer;
