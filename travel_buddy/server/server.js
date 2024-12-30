@@ -29,6 +29,10 @@ app.get('/env', (req, res) => {
     });
 });
 
+app.get('/api/message', (req, res) => {
+    res.json({ message: 'Hello from the backend' });
+});
+
 const User = require('./models/model');
 
 // Insert a sample user document
