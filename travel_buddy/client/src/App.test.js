@@ -6,3 +6,9 @@ test('renders welcome message', () => {
   const linkElement = screen.getByText(/Welcome to the App/i);
   expect(linkElement).toBeInTheDocument();
 });
+
+test('renders Sign Up button', () => {
+  render(<App />);
+  const buttonElement = screen.getByRole('button', { name: /Sign Up/i });
+  expect(buttonElement).toBeInTheDocument();
+});
