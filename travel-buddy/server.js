@@ -16,8 +16,7 @@ app.use('/api', authRoutes); // Use the auth routes under the /api path
 const PORT = process.env.PORT || 5000; // Use PORT from .env or default to 5000
 
 // Connect to MongoDB
-mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => console.log('MongoDB connected successfully'))
+mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: false, useUnifiedTopology: true })
     .catch(err => console.error('MongoDB connection error:', err));
 
 app.use('/api', matchRoutes); // Use the match routes under the /api path
@@ -26,6 +25,12 @@ app.get('/', (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-});
+const server = app.listen(PORT);
+
+// Function to close the MongoDB connection
+const closeMongoConnection = () => {
+    return mongoose.connection.close();
+};
+
+// Export the app, server, and close function for testing
+module.exports = { app, server, closeMongoConnection };
