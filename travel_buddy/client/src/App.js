@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import './App.css';
+import React from 'react';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Welcome to Travel Buddy Finder</h1>
-      </header>
+    <div>
+      <h1>Welcome to the App</h1>
+      <p>This is a sample application.</p>
     </div>
   );
 }

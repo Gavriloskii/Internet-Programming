@@ -15,5 +15,10 @@
     "express": "^4.18.2",
     "mongoose": "^8.9.2"
   },
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2"
+  }
 }
