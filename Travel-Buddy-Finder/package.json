@@ -5,7 +5,8 @@
     "react-redux": "^9.2.0"
   },
   "devDependencies": {
-    "concurrently": "^9.1.1"
+    "concurrently": "^9.1.1",
+    "mongodb-memory-server": "^10.1.2"
   },
   "scripts": {
     "start": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",

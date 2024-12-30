@@ -1,14 +1,17 @@
 const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
+
+let mongoServer;
 
 beforeAll(async () => {
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGODB_TEST_URI || 'mongodb://localhost:27017/travel-buddy-test');
-  }
+    mongoServer = await MongoMemoryServer.create();
+    await mongoose.connect(mongoServer.getUri(), {
+        useNewUrlParser: true,
+        useUnifiedTopology: true
+    });
 });
 
 afterAll(async () => {
-  if (mongoose.connection.readyState !== 0) {
-    await mongoose.connection.dropDatabase();
-    await mongoose.connection.close();
-  }
+    await mongoose.disconnect();
+    await mongoServer.stop();
 });
