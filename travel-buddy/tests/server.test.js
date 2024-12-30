@@ -1,18 +1,21 @@
 const request = require('supertest');
-const { app, closeMongoConnection } = require('../server'); // Import the app instance and close function
+const { app, startServer, closeMongoConnection } = require('../server'); // Import the app instance and close function
 
 describe('GET /', () => {
     let server;
 
     beforeAll((done) => {
-        server = app.listen(() => {
-            done();
-        });
+        server = startServer(); // Use the startServer function
+        done();
     });
 
     afterAll((done) => {
         closeMongoConnection().then(() => {
-            server.close(done);
+            console.log('MongoDB connection closed.');
+            server.close(() => {
+                console.log('Server closed.');
+                done();
+            });
         });
     });
 

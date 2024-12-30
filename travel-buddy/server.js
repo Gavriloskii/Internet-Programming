@@ -25,12 +25,14 @@ app.get('/', (req, res) => {
 });
 
 // Start the server
-const server = app.listen(PORT);
+const startServer = () => {
+    return app.listen(PORT);
+};
 
 // Function to close the MongoDB connection
 const closeMongoConnection = () => {
     return mongoose.connection.close();
 };
 
-// Export the app, server, and close function for testing
-module.exports = { app, server, closeMongoConnection };
+// Export the app, start function, and close function for testing
+module.exports = { app, startServer, closeMongoConnection };
