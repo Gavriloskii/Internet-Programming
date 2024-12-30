@@ -60,4 +60,7 @@ router.post('/login', async (req, res) => {
     res.status(200).json({ token });
 });
 
-module.exports = router;
+module.exports = {
+    router,
+    authMiddleware // Export the authMiddleware
+};

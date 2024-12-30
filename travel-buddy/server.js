@@ -1,9 +1,10 @@
 require('dotenv').config(); // Load environment variables from .env file
 const express = require('express');
 const mongoose = require('mongoose'); // Import Mongoose
-const authRoutes = require('./routes/auth'); // Import the auth routes
+const { router: authRoutes } = require('./routes/auth'); // Import the auth routes
 const quizRoutes = require('./routes/quiz'); // Import the quiz routes
-const cors = require('cors');
+const cors = require('cors');  
+const matchRoutes = require('./routes/match'); // Import the match routes
 const app = express();
 
 // Enable CORS for all origins
@@ -19,7 +20,7 @@ mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTo
     .then(() => console.log('MongoDB connected successfully'))
     .catch(err => console.error('MongoDB connection error:', err));
 
-// Test route
+app.use('/api', matchRoutes); // Use the match routes under the /api path
 app.get('/', (req, res) => {
     res.send('Server is running!');
 });
