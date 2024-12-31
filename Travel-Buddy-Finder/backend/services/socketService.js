@@ -1,50 +1,71 @@
 const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
+const cookie = require('cookie');
+const cookieParser = require('cookie-parser');
 const Match = require('../models/Match');
 const User = require('../models/User');
+const BaseSocketService = require('./base/BaseSocketService');
+const { SOCKET_EVENTS, SOCKET_CONFIG, COOKIE_CONFIG } = require('./constants/socketConstants');
 
-class SocketService {
+class SocketService extends BaseSocketService {
     constructor() {
+        super({
+            maxReconnectAttempts: SOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS,
+            reconnectDelay: SOCKET_CONFIG.RECONNECT_INTERVAL
+        });
         this.io = null;
-        this.connections = new Map();
-        this.reconnectAttempts = new Map();
-        this.MAX_RECONNECT_ATTEMPTS = 5;
-        this.RECONNECT_INTERVAL = 1000;
     }
 
     initialize(server) {
         this.io = socketIo(server, {
             cors: {
-                origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+                origin: process.env.NODE_ENV === 'production' 
+                    ? process.env.FRONTEND_URL 
+                    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
                 methods: ['GET', 'POST'],
-                credentials: true
+                credentials: true,
+                allowedHeaders: ['Cookie', 'cookie', 'authorization']
             },
-            pingTimeout: 60000,
-            pingInterval: 25000
+            pingTimeout: SOCKET_CONFIG.PING_TIMEOUT,
+            pingInterval: SOCKET_CONFIG.PING_INTERVAL,
+            cookie: COOKIE_CONFIG
         });
 
         this.io.use(this.authenticateSocket.bind(this));
-        this.io.on('connection', this.handleConnection.bind(this));
+        this.io.on(SOCKET_EVENTS.CONNECTION, this.handleConnection.bind(this));
 
         console.log('Socket.IO service initialized');
     }
 
     async authenticateSocket(socket, next) {
         try {
-            const token = socket.handshake.auth.token;
+            const cookieHeader = socket.handshake.headers.cookie;
+            if (!cookieHeader) {
+                return next(new Error('Authentication error: No cookies found'));
+            }
+
+            const cookies = cookie.parse(cookieHeader);
+            const signedCookies = cookieParser.signedCookies(cookies, process.env.COOKIE_SECRET);
+            const token = signedCookies.jwt;
+
             if (!token) {
-                return next(new Error('Authentication error'));
+                return next(new Error('Authentication error: No token found'));
             }
 
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await User.findById(decoded.id).select('_id name');
-            
-            if (!user) {
-                return next(new Error('User not found'));
-            }
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                const user = await User.findById(decoded.id).select('_id name');
+                
+                if (!user) {
+                    return next(new Error('User not found'));
+                }
 
-            socket.user = user;
-            next();
+                socket.user = user;
+                next();
+            } catch (jwtError) {
+                console.error('JWT verification error:', jwtError);
+                return next(new Error('Invalid token'));
+            }
         } catch (error) {
             console.error('Socket authentication error:', error);
             next(new Error('Authentication error'));
@@ -60,7 +81,7 @@ class SocketService {
         this.reconnectAttempts.delete(userId);
 
         // Handle swipe events
-        socket.on('swipe', async (data) => {
+        socket.on(SOCKET_EVENTS.SWIPE, async (data) => {
             try {
                 const { targetUserId, direction } = data;
                 const result = await this.handleSwipe(socket.user._id, targetUserId, direction);
@@ -69,10 +90,10 @@ class SocketService {
                     this.notifyMatch(result.match);
                 }
                 
-                socket.emit('swipeResult', { success: true, ...result });
+                socket.emit(SOCKET_EVENTS.SWIPE_RESULT, { success: true, ...result });
             } catch (error) {
                 console.error('Swipe error:', error);
-                socket.emit('swipeResult', { 
+                socket.emit(SOCKET_EVENTS.SWIPE_RESULT, { 
                     success: false, 
                     error: error.message 
                 });
@@ -80,72 +101,96 @@ class SocketService {
         });
 
         // Handle disconnection
-        socket.on('disconnect', () => {
+        socket.on(SOCKET_EVENTS.DISCONNECT, () => {
             console.log(`User disconnected: ${userId}`);
             this.connections.delete(userId);
-            this.handleDisconnect(userId);
+            super.handleDisconnect(userId);
         });
 
         // Handle errors
-        socket.on('error', (error) => {
+        socket.on(SOCKET_EVENTS.ERROR, (error) => {
             console.error(`Socket error for user ${userId}:`, error);
-            this.handleError(userId, error);
+            super.handleError(userId, error);
         });
     }
 
     async handleSwipe(userId, targetUserId, direction) {
-        if (direction === 'left') {
-            await User.findByIdAndUpdate(userId, {
-                $addToSet: { rejectedMatches: targetUserId }
+        try {
+            if (direction === 'left') {
+                await User.findByIdAndUpdate(userId, {
+                    $addToSet: { rejectedMatches: targetUserId }
+                });
+                return { isMatch: false };
+            }
+
+            const existingMatch = await Match.findOne({
+                users: { $all: [userId, targetUserId] }
             });
-            return { isMatch: false };
-        }
 
-        // Check if target user has already liked current user
-        const existingMatch = await Match.findOne({
-            users: { $all: [userId, targetUserId] }
-        });
+            if (existingMatch) {
+                return { isMatch: true, match: existingMatch };
+            }
 
-        if (existingMatch) {
-            return { isMatch: true, match: existingMatch };
-        }
+            const [currentUser, targetUser] = await Promise.all([
+                User.findById(userId).select('travelPreferences personalityType likes'),
+                User.findById(targetUserId).select('travelPreferences personalityType likes')
+            ]);
 
-        // Create potential match
-        const [currentUser, targetUser] = await Promise.all([
-            User.findById(userId).select('travelPreferences'),
-            User.findById(targetUserId).select('travelPreferences likes')
-        ]);
+            if (!currentUser || !targetUser) {
+                throw new Error('User not found');
+            }
 
-        const newMatch = new Match({
-            users: [userId, targetUserId]
-        });
+            if (!targetUser.likes) {
+                targetUser.likes = [];
+            }
 
-        // Calculate match score
-        const matchScore = newMatch.calculateMatchScore(
-            currentUser.travelPreferences,
-            targetUser.travelPreferences
-        );
+            const newMatch = new Match({
+                users: [userId, targetUserId],
+                status: targetUser.likes.includes(userId) ? 'accepted' : 'pending'
+            });
 
-        if (targetUser.likes.includes(userId)) {
-            // It's a match!
-            newMatch.status = 'accepted';
+            try {
+                const matchScore = newMatch.calculateMatchScore(
+                    currentUser.travelPreferences,
+                    targetUser.travelPreferences
+                );
+                newMatch.matchScore = matchScore;
+            } catch (error) {
+                console.error('Error calculating match score:', error);
+                newMatch.matchScore = 50;
+            }
+
             await newMatch.save();
-            return { isMatch: true, match: newMatch };
+
+            if (targetUser.likes.includes(userId)) {
+                return { 
+                    isMatch: true, 
+                    matchScore: newMatch.matchScore,
+                    match: newMatch
+                };
+            }
+
+            await User.findByIdAndUpdate(userId, 
+                { $addToSet: { likes: targetUserId } },
+                { upsert: true, setDefaultsOnInsert: true }
+            );
+
+            return { 
+                isMatch: false, 
+                matchScore: newMatch.matchScore,
+                match: newMatch
+            };
+        } catch (error) {
+            console.error('Error in handleSwipe:', error);
+            throw error;
         }
-
-        // Add to likes
-        await User.findByIdAndUpdate(userId, {
-            $addToSet: { likes: targetUserId }
-        });
-
-        return { isMatch: false, matchScore };
     }
 
     notifyMatch(match) {
         match.users.forEach(userId => {
             const userSocket = this.connections.get(userId.toString());
             if (userSocket) {
-                userSocket.emit('match', {
+                userSocket.emit(SOCKET_EVENTS.MATCH, {
                     matchId: match._id,
                     matchScore: match.matchScore,
                     users: match.users
@@ -154,61 +199,11 @@ class SocketService {
         });
     }
 
-    handleDisconnect(userId) {
-        const attempts = this.reconnectAttempts.get(userId) || 0;
-        
-        if (attempts < this.MAX_RECONNECT_ATTEMPTS) {
-            setTimeout(() => {
-                this.attemptReconnect(userId, attempts + 1);
-            }, this.RECONNECT_INTERVAL * Math.pow(2, attempts));
+    async onAttemptReconnect(userId) {
+        const user = await User.findById(userId);
+        if (!user) {
+            throw new Error('User not found during reconnection');
         }
-    }
-
-    async attemptReconnect(userId, attempts) {
-        try {
-            const user = await User.findById(userId);
-            if (!user) return;
-
-            if (!this.connections.has(userId)) {
-                this.reconnectAttempts.set(userId, attempts);
-                // Attempt to reconnect logic here
-                console.log(`Attempting to reconnect user ${userId}, attempt ${attempts}`);
-            }
-        } catch (error) {
-            console.error(`Reconnection attempt failed for user ${userId}:`, error);
-        }
-    }
-
-    handleError(userId, error) {
-        console.error(`Error for user ${userId}:`, error);
-        const userSocket = this.connections.get(userId);
-        
-        if (userSocket) {
-            userSocket.emit('error', {
-                message: 'An error occurred. Attempting to reconnect...'
-            });
-        }
-
-        this.handleDisconnect(userId);
-    }
-
-    // Utility method to broadcast to all connected users
-    broadcast(event, data, excludeUser = null) {
-        this.connections.forEach((socket, userId) => {
-            if (userId !== excludeUser) {
-                socket.emit(event, data);
-            }
-        });
-    }
-
-    // Method to get active connections count
-    getActiveConnectionsCount() {
-        return this.connections.size;
-    }
-
-    // Method to check if a user is connected
-    isUserConnected(userId) {
-        return this.connections.has(userId.toString());
     }
 }
 

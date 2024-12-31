@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.5.0",
+    "js-cookie": "^3.0.5",
+    "react-redux": "^9.2.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.1",
+    "mongodb-memory-server": "^10.1.2"
+  },
+  "scripts": {
+    "start": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
+    "start:frontend": "npm --prefix frontend start",
+    "start:backend": "npm --prefix backend start",
+    "test": "concurrently \"npm run test:frontend\" \"npm run test:backend\"",
+    "test:frontend": "npm --prefix frontend test",
+    "test:backend": "npm --prefix backend test"
+  }
+}

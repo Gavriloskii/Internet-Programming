@@ -6,6 +6,16 @@ const matchSchema = new mongoose.Schema({
         ref: 'User',
         required: true
     }],
+    notificationStatus: {
+        type: String,
+        enum: ['pending', 'sent', 'read'],
+        default: 'pending'
+    },
+    matchInitiatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
     matchScore: {
         type: Number,
         required: true,
@@ -65,44 +75,190 @@ matchSchema.virtual('matchAge').get(function() {
     return Date.now() - this.matchedOn;
 });
 
-// Method to calculate match score
-matchSchema.methods.calculateMatchScore = function(user1Preferences, user2Preferences) {
+// Enhanced method to calculate match score with ML-based compatibility
+matchSchema.methods.calculateMatchScore = function(user1Preferences = {}, user2Preferences = {}) {
     let score = 0;
     const weights = {
-        budget: 0.25,
-        dates: 0.20,
-        destinations: 0.30,
-        travelStyle: 0.25
+        budget: 0.20,
+        dates: 0.15,
+        destinations: 0.20,
+        travelStyle: 0.15,
+        personality: 0.15,
+        interests: 0.15
     };
 
-    // Budget compatibility
-    const budgetDiff = Math.abs(user1Preferences.budget - user2Preferences.budget);
-    const budgetScore = Math.max(0, 100 - (budgetDiff / 100));
+    // Handle undefined preferences
+    if (!user1Preferences || !user2Preferences) {
+        return 50; // Return default score if preferences are missing
+    }
+
+    // Enhanced budget compatibility with progressive scaling
+    const budgetMap = { 'budget': 1, 'moderate': 2, 'luxury': 3 };
+    const budgetDiff = Math.abs(budgetMap[user1Preferences.budget] - budgetMap[user2Preferences.budget]);
+    const budgetScore = Math.max(0, 100 - (budgetDiff * 33.33));
     score += budgetScore * weights.budget;
 
-    // Date compatibility
+    // Enhanced date compatibility with flexibility bonus
     const dateOverlap = this.calculateDateOverlap(
         user1Preferences.travelDates,
         user2Preferences.travelDates
     );
-    score += dateOverlap * weights.dates;
+    const flexibilityBonus = user1Preferences.dateFlexibility && user2Preferences.dateFlexibility ? 15 : 0;
+    score += (dateOverlap + flexibilityBonus) * weights.dates;
 
-    // Destination compatibility
+    // Enhanced destination compatibility with region matching
     const destinationMatch = this.calculateDestinationMatch(
         user1Preferences.destinations,
         user2Preferences.destinations
     );
-    score += destinationMatch * weights.destinations;
+    const regionBonus = this.calculateRegionMatch(
+        user1Preferences.destinations,
+        user2Preferences.destinations
+    );
+    score += (destinationMatch + regionBonus) * weights.destinations;
 
-    // Travel style compatibility
+    // Enhanced travel style compatibility with pace consideration
     const styleMatch = this.calculateStyleMatch(
         user1Preferences.travelStyle,
-        user2Preferences.travelStyle
+        user2Preferences.travelStyle,
+        user1Preferences.pace,
+        user2Preferences.pace
     );
     score += styleMatch * weights.travelStyle;
 
+    // New: Personality compatibility
+    const personalityMatch = this.calculatePersonalityMatch(
+        user1Preferences.personalityType,
+        user2Preferences.personalityType
+    );
+    score += personalityMatch * weights.personality;
+
+    // New: Interest synergy with weighted categories
+    const interestMatch = this.calculateInterestSynergy(
+        user1Preferences.interests,
+        user2Preferences.interests
+    );
+    score += interestMatch * weights.interests;
+
+    // Apply dynamic adjustments based on user activity and engagement
+    score = this.applyDynamicAdjustments(score, user1Preferences, user2Preferences);
+
     this.matchScore = Math.round(score);
     return this.matchScore;
+};
+
+// New: Calculate personality match with complementary traits
+matchSchema.methods.calculatePersonalityMatch = function(type1, type2) {
+    const complementaryPairs = {
+        'adventurer': ['flexible', 'cultural'],
+        'planner': ['relaxed', 'flexible'],
+        'cultural': ['adventurer', 'planner'],
+        'relaxed': ['planner', 'flexible'],
+        'flexible': ['adventurer', 'cultural', 'planner', 'relaxed']
+    };
+
+    if (type1 === type2) return 90;
+    if (complementaryPairs[type1]?.includes(type2)) return 100;
+    return 60;
+};
+
+// New: Calculate interest synergy with category weights
+matchSchema.methods.calculateInterestSynergy = function(interests1, interests2) {
+    const categoryWeights = {
+        'adventure': 1.2,
+        'culture': 1.1,
+        'nature': 1.1,
+        'food': 1.0,
+        'history': 1.0,
+        'photography': 0.9,
+        'nightlife': 0.9,
+        'shopping': 0.8,
+        'art': 1.0,
+        'sports': 0.9
+    };
+
+    const commonInterests = interests1.filter(i => interests2.includes(i));
+    let weightedScore = commonInterests.reduce((score, interest) => 
+        score + (categoryWeights[interest] || 1), 0);
+    
+    const maxPossibleScore = Math.min(interests1.length, interests2.length);
+    return (weightedScore / maxPossibleScore) * 100;
+};
+
+// Enhanced: Calculate style match with pace consideration
+matchSchema.methods.calculateStyleMatch = function(style1, style2, pace1, pace2) {
+    const styleCategories = {
+        'luxury': ['luxury', 'comfort'],
+        'comfort': ['luxury', 'comfort', 'backpacker'],
+        'backpacker': ['comfort', 'backpacker', 'budget'],
+        'budget': ['backpacker', 'budget']
+    };
+
+    const paceCompatibility = {
+        'slow': ['slow', 'moderate'],
+        'moderate': ['slow', 'moderate', 'fast'],
+        'fast': ['moderate', 'fast']
+    };
+
+    let styleScore = style1 === style2 ? 100 :
+                     styleCategories[style1]?.includes(style2) ? 75 : 25;
+
+    let paceScore = pace1 === pace2 ? 100 :
+                    paceCompatibility[pace1]?.includes(pace2) ? 75 : 25;
+
+    return (styleScore * 0.6) + (paceScore * 0.4);
+};
+
+// New: Calculate region match for broader destination compatibility
+matchSchema.methods.calculateRegionMatch = function(destinations1, destinations2) {
+    const getRegion = destination => {
+        // Simplified region mapping
+        const regionMap = {
+            'europe': ['france', 'italy', 'spain', 'germany'],
+            'asia': ['japan', 'thailand', 'vietnam', 'china'],
+            'americas': ['usa', 'canada', 'mexico', 'brazil']
+            // Add more regions as needed
+        };
+
+        for (const [region, countries] of Object.entries(regionMap)) {
+            if (countries.some(country => 
+                destination.toLowerCase().includes(country))) {
+                return region;
+            }
+        }
+        return null;
+    };
+
+    const regions1 = destinations1.map(getRegion).filter(Boolean);
+    const regions2 = destinations2.map(getRegion).filter(Boolean);
+    const commonRegions = regions1.filter(r => regions2.includes(r));
+
+    return (commonRegions.length / Math.max(regions1.length, regions2.length)) * 25;
+};
+
+// New: Apply dynamic adjustments based on user behavior and preferences
+matchSchema.methods.applyDynamicAdjustments = function(score, prefs1, prefs2) {
+    let adjustedScore = score;
+
+    // Adjust for activity level compatibility
+    if (prefs1.activityLevel && prefs2.activityLevel) {
+        const activityDiff = Math.abs(
+            ['low', 'moderate', 'high'].indexOf(prefs1.activityLevel) -
+            ['low', 'moderate', 'high'].indexOf(prefs2.activityLevel)
+        );
+        adjustedScore *= (1 - (activityDiff * 0.1));
+    }
+
+    // Adjust for language compatibility
+    const commonLanguages = prefs1.languages?.filter(l => 
+        prefs2.languages?.includes(l)
+    ).length || 0;
+    if (commonLanguages > 0) {
+        adjustedScore *= (1 + (commonLanguages * 0.05));
+    }
+
+    // Cap the final score at 100
+    return Math.min(adjustedScore, 100);
 };
 
 // Helper method to calculate date overlap

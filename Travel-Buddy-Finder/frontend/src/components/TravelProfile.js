@@ -1,53 +1,180 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { motion } from 'framer-motion';
 import {
-    GlobeAltIcon,
-    UserIcon,
-    CalendarIcon,
     MapPinIcon,
-    LanguageIcon,
     PencilIcon,
     CameraIcon,
     CheckIcon,
     XMarkIcon
 } from '@heroicons/react/24/outline';
 import { updateProfile, selectUser } from '../redux/userSlice';
+import { apiService as api } from '../services/api';
 
 const TravelProfile = () => {
     const dispatch = useDispatch();
     const user = useSelector(selectUser);
     const [isEditing, setIsEditing] = useState(false);
-    const [editedProfile, setEditedProfile] = useState({
-        name: user?.name || '',
-        bio: user?.bio || '',
-        location: user?.location || '',
-        languages: user?.languages || [],
-        travelPreferences: user?.travelPreferences || {
-            travelStyle: '',
-            planningStyle: '',
-            accommodation: '',
-            groupSize: '',
-            budget: ''
-        },
-        interests: user?.interests || []
-    });
+    const [editedProfile, setEditedProfile] = useState(null);
+    const [previewImage, setPreviewImage] = useState(null);
+
+    // Log and validate profile picture URL when user data changes
+    useEffect(() => {
+        if (user?.profilePicture) {
+            console.log('Profile Picture URL:', user.profilePicture);
+            
+            // Verify URL format
+            if (!user.profilePicture.startsWith('/uploads/')) {
+                console.warn('Invalid profile picture URL format:', user.profilePicture);
+            }
+        }
+    }, [user?.profilePicture]);
+
+    // Initialize editedProfile when entering edit mode
+    const startEditing = () => {
+        setEditedProfile({
+            name: user?.name || '',
+            bio: user?.bio || '',
+            location: {
+                type: 'Point',
+                coordinates: user?.location?.coordinates || [0, 0],
+                city: user?.location?.city || '',
+                country: user?.location?.country || ''
+            },
+            languages: user?.languages || [],
+            travelPreferences: user?.travelPreferences || {
+                travelStyle: '',
+                planningStyle: '',
+                accommodation: '',
+                groupSize: '',
+                budget: ''
+            },
+            interests: user?.interests || []
+        });
+        setIsEditing(true);
+    };
+
+    // Reset everything when canceling edit
+    const cancelEdit = () => {
+        setEditedProfile(null);
+        setPreviewImage(null);
+        setIsEditing(false);
+    };
 
     const handleSave = async () => {
         try {
-            await dispatch(updateProfile(editedProfile)).unwrap();
+            const formData = new FormData();
+            
+            // If there's a new profile picture, append it
+            if (editedProfile.avatar) {
+                formData.append('profilePicture', editedProfile.avatar);
+                // Also append the field to indicate we're updating the profile picture
+                formData.append('updateProfilePicture', 'true');
+            }
+
+            // Append other profile data
+            Object.keys(editedProfile).forEach(key => {
+                if (key !== 'avatar') {
+                    if (typeof editedProfile[key] === 'object') {
+                        formData.append(key, JSON.stringify(editedProfile[key]));
+                    } else {
+                        formData.append(key, editedProfile[key]);
+                    }
+                }
+            });
+
+            // Show loading state
+            const saveButton = document.querySelector('#save-button');
+            if (saveButton) {
+                saveButton.disabled = true;
+                saveButton.innerHTML = '<span class="animate-spin">⌛</span>';
+            }
+
+            // Update profile with FormData
+            await dispatch(updateProfile(formData)).unwrap();
+            
+            // Re-fetch updated profile to get new profile picture URL
+            const response = await api.users.getProfile();
+            if (response.data?.data?.user?.profilePicture) {
+                const profilePicture = response.data.data.user.profilePicture;
+                console.log('Updated Profile Picture URL:', profilePicture);
+                
+                // Verify URL format
+                if (!profilePicture.startsWith('/uploads/')) {
+                    console.warn('Invalid updated profile picture URL format:', profilePicture);
+                    throw new Error('Invalid profile picture URL format');
+                }
+                
+                setPreviewImage(`http://localhost:5001${profilePicture}`);
+            }
+            
+            // Show success message
+            const successMessage = document.createElement('div');
+            successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
+            successMessage.textContent = 'Profile updated successfully!';
+            document.body.appendChild(successMessage);
+
+            // Remove success message after 3 seconds
+            setTimeout(() => {
+                successMessage.remove();
+            }, 3000);
+
+            // Reset edit state and preview
             setIsEditing(false);
+            setEditedProfile(null);
+            setPreviewImage(null);
         } catch (error) {
             console.error('Failed to update profile:', error);
+            
+            // Show error message
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded shadow-lg z-50';
+            errorMessage.textContent = error.message || 'Failed to update profile';
+            document.body.appendChild(errorMessage);
+
+            // Remove error message after 3 seconds
+            setTimeout(() => {
+                errorMessage.remove();
+            }, 3000);
+        } finally {
+            // Reset save button state
+            const saveButton = document.querySelector('#save-button');
+            if (saveButton) {
+                saveButton.disabled = false;
+                saveButton.innerHTML = '<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>';
+            }
         }
     };
 
     const handleImageUpload = (event) => {
         const file = event.target.files[0];
         if (file) {
-            const formData = new FormData();
-            formData.append('avatar', file);
-            // Handle image upload logic here
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+
+            // Validate file size (2MB limit)
+            if (file.size > 2 * 1024 * 1024) {
+                alert('File size must be less than 2MB');
+                return;
+            }
+
+            setEditedProfile(prev => ({
+                ...prev,
+                avatar: file
+            }));
+
+            // Show preview
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewImage(reader.result);
+            };
+            reader.onerror = () => {
+                alert('Error reading file');
+                setPreviewImage(null);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -75,9 +202,14 @@ const TravelProfile = () => {
                 <div className="absolute -bottom-16 left-8">
                     <div className="relative">
                         <img
-                            src={user?.avatar || 'https://via.placeholder.com/128'}
+                            id="profile-preview"
+                            src={previewImage || (user?.profilePicture ? 
+                                (user.profilePicture.startsWith('/uploads/') ? 
+                                    `http://localhost:5001${user.profilePicture}` : 
+                                    (console.error('Invalid profile picture URL format:', user.profilePicture), 'https://via.placeholder.com/128')
+                                ) : 'https://via.placeholder.com/128')}
                             alt={user?.name}
-                            className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800"
+                            className="w-32 h-32 rounded-full border-4 border-white dark:border-gray-800 object-cover"
                         />
                         {isEditing && (
                             <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer">
@@ -98,13 +230,14 @@ const TravelProfile = () => {
                     {isEditing ? (
                         <div className="flex space-x-2">
                             <button
+                                id="save-button"
                                 onClick={handleSave}
-                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <CheckIcon className="h-5 w-5" />
                             </button>
                             <button
-                                onClick={() => setIsEditing(false)}
+                                onClick={cancelEdit}
                                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
                             >
                                 <XMarkIcon className="h-5 w-5" />
@@ -112,7 +245,7 @@ const TravelProfile = () => {
                         </div>
                     ) : (
                         <button
-                            onClick={() => setIsEditing(true)}
+                            onClick={startEditing}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                         >
                             <PencilIcon className="h-5 w-5" />
@@ -146,15 +279,18 @@ const TravelProfile = () => {
                             {isEditing ? (
                                 <input
                                     type="text"
-                                    value={editedProfile.location}
+                                    value={editedProfile.location?.city || ''}
                                     onChange={(e) => setEditedProfile({
                                         ...editedProfile,
-                                        location: e.target.value
+                                        location: {
+                                            ...editedProfile.location,
+                                            city: e.target.value
+                                        }
                                     })}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg"
                                 />
                             ) : (
-                                user?.location
+                                `${user?.location?.city || ''}, ${user?.location?.country || ''}`
                             )}
                         </div>
                     </div>
@@ -190,7 +326,7 @@ const TravelProfile = () => {
                                     key={index}
                                     className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-sm"
                                 >
-                                    {language}
+                                    {language.language} - {language.proficiency}
                                     {isEditing && (
                                         <button
                                             onClick={() => setEditedProfile({
@@ -208,10 +344,16 @@ const TravelProfile = () => {
                                 <button
                                     onClick={() => {
                                         const language = prompt('Enter language');
-                                        if (language) {
+                                        const proficiency = prompt('Enter proficiency (Beginner/Intermediate/Advanced/Native)');
+                                        if (language && proficiency) {
                                             setEditedProfile({
                                                 ...editedProfile,
-                                                languages: [...editedProfile.languages, language]
+                                                languages: [...editedProfile.languages, {
+                                                    language,
+                                                    proficiency,
+                                                    _id: Date.now().toString(),
+                                                    id: Date.now().toString()
+                                                }]
                                             });
                                         }
                                     }}

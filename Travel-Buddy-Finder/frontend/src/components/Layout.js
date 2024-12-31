@@ -23,16 +23,10 @@ const Layout = () => {
     useEffect(() => {
         // Connect socket when authenticated
         if (isAuthenticated) {
-            const token = localStorage.getItem('token');
-            if (token) {
-                socketService.connect(token);
-            }
+            socketService.connect();
         }
-
-        // Cleanup socket connection on unmount
-        return () => {
-            socketService.disconnect();
-        };
+        // Don't disconnect on unmount as other components might need the socket
+        // Only disconnect when user logs out
     }, [isAuthenticated]);
 
     // Loading states

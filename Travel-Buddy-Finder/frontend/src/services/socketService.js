@@ -1,267 +1,109 @@
-import io from 'socket.io-client';
-import { store } from '../redux/store';
-import {
-    addMessage,
-    setTypingStatus,
-    updateOnlineStatus,
-    addConversation,
-    updateConversation
-} from '../redux/chatSlice';
-import {
-    addMatch,
-    updateMatch,
-    updateMatchStats
-} from '../redux/matchesSlice';
+import store from '../redux/store';
+import { handleNewMessage, setTypingStatus, updateOnlineStatus } from '../redux/chatSlice';
+import { showMatchNotification } from '../redux/notificationsSlice';
+import BaseSocketService from './base/BaseSocketService';
+import { SOCKET_EVENTS, SOCKET_CONFIG, SOCKET_URLS } from './constants/socketConstants';
 
-class SocketService {
+class SocketService extends BaseSocketService {
     constructor() {
-        this.socket = null;
-        this.connected = false;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-        this.reconnectDelay = 1000;
-        this.heartbeatInterval = null;
-        this.eventHandlers = new Map();
-        this.pendingMessages = new Map();
+        super({
+            maxReconnectAttempts: SOCKET_CONFIG.MAX_RECONNECT_ATTEMPTS,
+            reconnectDelay: SOCKET_CONFIG.RECONNECT_INTERVAL
+        });
     }
 
-    connect(token) {
-        if (this.connected) return;
+    connect() {
+        const socketUrl = process.env.NODE_ENV === 'production' 
+            ? SOCKET_URLS.production 
+            : SOCKET_URLS.development;
 
-        const socketUrl = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5001';
-        
-        this.socket = io(socketUrl, {
-            auth: { token },
-            transports: ['websocket'],
-            reconnection: true,
-            reconnectionDelay: this.reconnectDelay,
-            reconnectionDelayMax: 5000,
-            reconnectionAttempts: this.maxReconnectAttempts
+        super.connect(socketUrl, {
+            path: '/socket.io',
+            auth: {
+                credentials: 'include'
+            },
+            pingTimeout: SOCKET_CONFIG.PING_TIMEOUT,
+            pingInterval: SOCKET_CONFIG.PING_INTERVAL
         });
-
+        
         this.setupEventHandlers();
-        this.startHeartbeat();
     }
 
     setupEventHandlers() {
-        // Connection events
-        this.socket.on('connect', () => {
-            console.log('Socket connected');
-            this.connected = true;
-            this.reconnectAttempts = 0;
-            store.dispatch({ type: 'socket/connected' });
-            this.resendPendingMessages();
+        this.on(SOCKET_EVENTS.MESSAGE, (messageData) => {
+            store.dispatch(handleNewMessage(messageData));
         });
 
-        this.socket.on('disconnect', (reason) => {
-            console.log('Socket disconnected:', reason);
-            this.connected = false;
-            store.dispatch({ type: 'socket/disconnected' });
-            this.handleDisconnect(reason);
-        });
-
-        this.socket.on('error', (error) => {
-            console.error('Socket error:', error);
-            store.dispatch({ type: 'socket/error', payload: error });
-        });
-
-        // Chat events
-        this.socket.on('message', (message) => {
-            store.dispatch(addMessage({
-                conversationId: message.conversationId,
-                message
-            }));
-            this.acknowledgePendingMessage(message.id);
-        });
-
-        this.socket.on('typing', ({ conversationId, userId, isTyping }) => {
+        this.on(SOCKET_EVENTS.TYPING, ({ conversationId, userId, isTyping }) => {
             store.dispatch(setTypingStatus({ conversationId, userId, isTyping }));
         });
 
-        this.socket.on('presence', ({ userId, status }) => {
+        this.on(SOCKET_EVENTS.PRESENCE, ({ userId, status }) => {
             store.dispatch(updateOnlineStatus({ userId, isOnline: status === 'online' }));
         });
 
-        // Match events
-        this.socket.on('match', (match) => {
-            store.dispatch(addMatch(match));
-            store.dispatch(addConversation(match.conversation));
-        });
+        // Handle match notifications
+        this.on(SOCKET_EVENTS.MATCH, async (matchData) => {
+            try {
+                // Fetch matched user details
+                const response = await fetch(`/api/users/${matchData.users.find(id => id !== store.getState().user.id)}`);
+                const matchedUser = await response.json();
+                
+                // Dispatch notification with user details
+                store.dispatch(showMatchNotification({
+                    matchId: matchData.matchId,
+                    userName: matchedUser.name,
+                    matchScore: matchData.matchScore,
+                    userId: matchedUser._id
+                }));
 
-        this.socket.on('matchUpdate', (update) => {
-            store.dispatch(updateMatch(update));
-        });
-
-        this.socket.on('matchStats', (stats) => {
-            store.dispatch(updateMatchStats(stats));
-        });
-
-        // Group events
-        this.socket.on('groupMessage', (message) => {
-            store.dispatch(addMessage({
-                conversationId: message.groupId,
-                message: { ...message, isGroupMessage: true }
-            }));
-        });
-
-        this.socket.on('groupUpdate', (update) => {
-            store.dispatch(updateConversation(update));
-        });
-
-        // Custom event handler
-        this.socket.onAny((eventName, ...args) => {
-            const handler = this.eventHandlers.get(eventName);
-            if (handler) {
-                handler(...args);
+                // Play notification sound from CDN
+                const audio = new Audio('https://cdn.jsdelivr.net/gh/freeCodeCamp/cdn@2b5013f/build/audio/beep.mp3');
+                audio.volume = 0.5; // Set volume to 50%
+                audio.play().catch(err => console.log('Audio playback failed:', err));
+            } catch (error) {
+                console.error('Error handling match notification:', error);
             }
         });
     }
 
-    startHeartbeat() {
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-        }
-
-        this.heartbeatInterval = setInterval(() => {
-            if (this.connected) {
-                this.socket.emit('heartbeat');
-            }
-        }, 30000); // Send heartbeat every 30 seconds
+    onConnect() {
+        store.dispatch({ type: 'socket/connected' });
     }
 
-    handleDisconnect(reason) {
-        if (reason === 'io server disconnect') {
-            // Server initiated disconnect, attempt reconnection
-            this.reconnect();
-        }
-
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-        }
+    onDisconnect() {
+        store.dispatch({ type: 'socket/disconnected' });
     }
 
-    reconnect() {
-        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
-            return;
-        }
-
-        this.reconnectAttempts++;
-        setTimeout(() => {
-            console.log(`Attempting reconnection (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-            this.socket.connect();
-        }, this.reconnectDelay * this.reconnectAttempts);
+    handleAuthError() {
+        super.handleAuthError();
+        store.dispatch({ type: 'socket/authError' });
     }
 
-    disconnect() {
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-            this.connected = false;
-            if (this.heartbeatInterval) {
-                clearInterval(this.heartbeatInterval);
-            }
-        }
-    }
-
-    // Message handling with acknowledgment
     sendMessage(message) {
+        this.emit(SOCKET_EVENTS.MESSAGE, message);
+    }
+
+    swipe(userId, direction) {
         return new Promise((resolve, reject) => {
             if (!this.connected) {
-                this.queueMessage(message);
-                reject(new Error('Not connected'));
+                reject(new Error('Socket not connected'));
                 return;
             }
 
-            this.socket.emit('message', message, (response) => {
-                if (response.error) {
-                    reject(response.error);
-                } else {
-                    resolve(response);
-                }
-            });
+            this.emit(SOCKET_EVENTS.SWIPE, { targetUserId: userId, direction });
+            
+            const timeout = setTimeout(() => {
+                this.off(SOCKET_EVENTS.SWIPE_RESULT);
+                reject(new Error('Swipe response timeout'));
+            }, 5000);
 
-            // Add to pending messages with timeout
-            this.addPendingMessage(message);
-        });
-    }
-
-    queueMessage(message) {
-        const timestamp = Date.now();
-        this.pendingMessages.set(message.id, {
-            message,
-            timestamp,
-            attempts: 0
-        });
-    }
-
-    addPendingMessage(message) {
-        const timeout = setTimeout(() => {
-            const pending = this.pendingMessages.get(message.id);
-            if (pending && pending.attempts < 3) {
-                pending.attempts++;
-                this.sendMessage(message); // Retry sending
-            } else {
-                this.pendingMessages.delete(message.id);
-            }
-        }, 5000); // 5 second timeout
-
-        this.pendingMessages.set(message.id, {
-            message,
-            timeout,
-            attempts: 0
-        });
-    }
-
-    acknowledgePendingMessage(messageId) {
-        const pending = this.pendingMessages.get(messageId);
-        if (pending) {
-            if (pending.timeout) {
-                clearTimeout(pending.timeout);
-            }
-            this.pendingMessages.delete(messageId);
-        }
-    }
-
-    resendPendingMessages() {
-        for (const [messageId, { message }] of this.pendingMessages) {
-            this.sendMessage(message);
-        }
-    }
-
-    // Enhanced event handling
-    on(event, callback) {
-        this.eventHandlers.set(event, callback);
-    }
-
-    off(event) {
-        this.eventHandlers.delete(event);
-    }
-
-    emit(event, data, callback) {
-        if (!this.connected) {
-            if (callback) {
-                callback(new Error('Not connected'));
-            }
-            return;
-        }
-
-        this.socket.emit(event, data, callback);
-    }
-
-    // Presence management
-    updatePresence(status) {
-        if (this.connected) {
-            this.socket.emit('presence', status);
-        }
-    }
-
-    // Group management
-    joinGroup(groupId) {
-        return new Promise((resolve, reject) => {
-            this.socket.emit('joinGroup', groupId, (response) => {
-                if (response.error) {
-                    reject(response.error);
+            this.on(SOCKET_EVENTS.SWIPE_RESULT, (response) => {
+                clearTimeout(timeout);
+                this.off(SOCKET_EVENTS.SWIPE_RESULT);
+                
+                if (!response.success) {
+                    reject(new Error(response.error));
                 } else {
                     resolve(response);
                 }
@@ -269,36 +111,12 @@ class SocketService {
         });
     }
 
-    leaveGroup(groupId) {
-        return new Promise((resolve, reject) => {
-            this.socket.emit('leaveGroup', groupId, (response) => {
-                if (response.error) {
-                    reject(response.error);
-                } else {
-                    resolve(response);
-                }
-            });
-        });
-    }
-
-    // Typing indicators
     setTypingStatus(conversationId, isTyping) {
-        if (this.connected) {
-            this.socket.emit('typing', { conversationId, isTyping });
-        }
+        this.emit(SOCKET_EVENTS.TYPING, { conversationId, isTyping });
     }
 
-    // Match interactions
-    swipe(userId, direction) {
-        return new Promise((resolve, reject) => {
-            this.socket.emit('swipe', { userId, direction }, (response) => {
-                if (response.error) {
-                    reject(response.error);
-                } else {
-                    resolve(response);
-                }
-            });
-        });
+    updatePresence(status) {
+        this.emit(SOCKET_EVENTS.PRESENCE, { status });
     }
 }
 

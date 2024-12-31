@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { users } from '../services/api';
+import { addNotification } from './notificationsSlice';
 
 // Async thunks
 export const fetchMatches = createAsyncThunk(
@@ -137,7 +138,15 @@ export const {
 // Thunks
 export const handleNewMatch = (matchData) => (dispatch) => {
     dispatch(addMatch(matchData));
-    // Additional actions can be dispatched here, like showing notifications
+    
+    // Create a notification for the new match
+    dispatch(addNotification({
+        id: `match-${matchData.id}`,
+        type: 'match',
+        content: `You have a new match with ${matchData.name}!`,
+        timestamp: new Date().toISOString(),
+        data: matchData
+    }));
 };
 
 export const handleMatchRemoval = (matchId) => (dispatch) => {

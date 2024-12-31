@@ -1,7 +1,12 @@
 import React, { useEffect } from 'react';
-import { Provider } from 'react-redux';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import UserDashboard from './pages/UserDashboard';
+import { Provider, useSelector } from 'react-redux';
+import MatchNotification from './components/MatchNotification';
+import UserProfile from './pages/UserProfile';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import store from './redux/store';
+import { selectIsAuthenticated, selectLoading } from './redux/userSlice';
+import { removeMatchNotification } from './redux/notificationsSlice';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -21,14 +26,44 @@ import TravelJournal from './components/TravelJournal';
 import ChatList from './components/ChatList';
 import Chat from './components/Chat';
 import GroupChat from './components/GroupChat';
+import TestRedux from './components/TestRedux'; // Importing TestRedux
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
+    const isAuthenticated = useSelector(selectIsAuthenticated);
+    const loading = useSelector(selectLoading);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
+
     return children;
+};
+
+const NotificationHandler = () => {
+    const matchNotifications = useSelector(state => state.notifications.matchNotifications);
+    
+    return (
+        <>
+            {matchNotifications.map((notification) => (
+                <MatchNotification
+                    key={notification.matchId}
+                    match={notification}
+                    onClose={() => {
+                        store.dispatch(removeMatchNotification(notification.matchId));
+                    }}
+                />
+            ))}
+        </>
+    );
 };
 
 const App = () => {
@@ -54,14 +89,14 @@ const App = () => {
 
     return (
         <Provider store={store}>
-            <Router>
+            <BrowserRouter>
                 <Routes>
-                    {/* Public Routes */}
                     <Route path="/" element={<HomePage />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
-
-                    {/* Protected Routes */}
+                    {/* Temporary: Making dashboard directly accessible */}
+                    <Route path="/dashboard" element={<UserDashboard />} />
+                    
                     <Route
                         path="/app"
                         element={
@@ -83,9 +118,9 @@ const App = () => {
                         <Route path="events" element={<EventsPage />} />
                         <Route path="forum" element={<ForumPage />} />
                         <Route path="itinerary" element={<ItineraryPage />} />
+                        <Route path="dashboard" element={<UserDashboard />} />
+                        <Route path="user-profile" element={<UserProfile />} />
                     </Route>
-
-                    {/* 404 Route */}
                     <Route
                         path="*"
                         element={
@@ -111,7 +146,9 @@ const App = () => {
                         }
                     />
                 </Routes>
-            </Router>
+                <TestRedux />
+                <NotificationHandler />
+            </BrowserRouter>
         </Provider>
     );
 };

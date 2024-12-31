@@ -46,22 +46,23 @@ const Login = () => {
 
         try {
             const resultAction = await dispatch(loginUser({ email, password }));
+            
             if (loginUser.fulfilled.match(resultAction)) {
-                // Redirect to home page on successful login
-                navigate('/app/swipe');
+                // Show success message and navigate
+                const successMessage = document.createElement('div');
+                successMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
+                successMessage.textContent = 'Login successful!';
+                document.body.appendChild(successMessage);
+
+                // Clean up and navigate
+                setTimeout(() => {
+                    successMessage.remove();
+                    navigate('/app/swipe');
+                }, 1500);
             }
         } catch (err) {
-            // Track failed login attempts for rate limiting
-            const failedAttempts = parseInt(localStorage.getItem('failedLoginAttempts') || '0');
-            localStorage.setItem('failedLoginAttempts', (failedAttempts + 1).toString());
-            
-            // If too many failed attempts, show cooldown message
-            if (failedAttempts >= 4) {
-                setLocalError('Too many failed attempts. Please try again in a few minutes.');
-                setTimeout(() => {
-                    localStorage.setItem('failedLoginAttempts', '0');
-                }, 300000); // 5 minutes cooldown
-            }
+            console.error('Login error:', err);
+            setLocalError(err.response?.data?.message || 'An unexpected error occurred. Please try again.');
         }
     };
 
@@ -158,8 +159,6 @@ const Login = () => {
                                     value={password}
                                     onChange={handlePasswordChange}
                                     className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-gray-700 dark:text-white"
-                                    pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$"
-                                    title="Password must be at least 8 characters long and include uppercase, lowercase, number, and special character (!@#$%^&*)"
                                 />
                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                                     <button

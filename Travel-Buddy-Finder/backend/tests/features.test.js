@@ -37,6 +37,13 @@ describe('Travel Buddy Feature Tests', () => {
     authToken = loginResponse.body.token;
   });
 
+  afterAll(async () => {
+    // Log any unhandled promise rejections
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    });
+  });
+
   describe('Events Feature', () => {
     it('should create a new event', async () => {
       const newEvent = {

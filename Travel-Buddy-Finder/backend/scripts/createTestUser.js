@@ -10,35 +10,33 @@ const createTestUser = async () => {
         });
 
         // Delete existing test user if exists
-        await User.deleteOne({ email: 'test@example.com' });
+        await User.deleteOne({ email: 'test.user@example.com' });
 
-        // Create new test user
+        // Create new test user with a password that meets all requirements:
+        // - At least 8 characters
+        // - Contains numbers
+        // - Contains uppercase and lowercase letters
+        // - Contains special characters
         const testUser = await User.create({
             name: 'Test User',
-            email: 'test@example.com',
-            password: 'Test123!@#',
-            personalityType: 'adventurer',
+            email: 'test.user@example.com',
+            password: 'Test@User123',  // Updated to meet all requirements
+            passwordConfirm: 'Test@User123', // Added password confirmation
+            verified: true,
             travelPreferences: {
                 budget: 'moderate',
                 pace: 'moderate',
-                interests: ['nature', 'culture', 'food'],
                 accommodationPreference: 'flexible'
-            },
-            languages: [{
-                language: 'English',
-                proficiency: 'native'
-            }],
-            location: {
-                coordinates: [0, 0],
-                country: 'United States',
-                city: 'New York'
-            },
-            verified: true,
-            active: true
+            }
         });
 
-        console.log('Test user created:', testUser);
-        process.exit(0);
+        console.log('Test user created successfully:', {
+            id: testUser._id,
+            email: testUser.email,
+            name: testUser.name
+        });
+
+        await mongoose.connection.close();
     } catch (error) {
         console.error('Error creating test user:', error);
         process.exit(1);
