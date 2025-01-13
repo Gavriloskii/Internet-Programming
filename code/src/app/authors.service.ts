@@ -8,6 +8,11 @@ const BASE_URL = 'http://localhost:3000';
   providedIn: 'root'
 })
 export class AuthorsService {
+  
+  createAuthor(author: Author) {
+    const url = `${BASE_URL}/authors`;
+    return this.http.post<Author>(url, author);
+  }
 
   constructor(private http: HttpClient) { }
 
@@ -19,5 +24,10 @@ export class AuthorsService {
   getAuthorById(id: number) {
     const url = `${BASE_URL}/authors/${id}`;
     return this.http.get<Author>(url);
+  }
+
+  updateAuthor(id: number, author: Author) {
+    const url = `${BASE_URL}/authors/${id}`;
+    return this.http.put<Author>(url, author);
   }
 }
