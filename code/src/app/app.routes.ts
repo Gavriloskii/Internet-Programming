@@ -2,6 +2,9 @@ import { Routes } from '@angular/router';
 import { AuthorListComponent } from './author-list/author-list.component';
 import { AuthorDetailsComponent } from './author-details/author-details.component';
 import { AuthorEditComponent } from './author-edit/author-edit.component';
+import { AuthorCreateComponent } from './author-create/author-create.component'; // Importing AuthorCreateComponent
+
+// Define the application routes
 
 export const routes: Routes = [
     { path: '', redirectTo: 'authors', pathMatch: 'full' },
