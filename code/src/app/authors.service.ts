@@ -26,6 +26,11 @@ export class AuthorsService {
     return this.http.get<Author>(url);
   }
 
+  deleteAuthor(id: number) {
+    const url = `${BASE_URL}/authors/${id}`;
+    return this.http.delete(url);
+  }
+
   updateAuthor(id: number, author: Author) {
     const url = `${BASE_URL}/authors/${id}`;
     return this.http.put<Author>(url, author);

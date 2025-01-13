@@ -73,6 +73,16 @@ describe('AuthorsService', () => {
     req.flush(updatedAuthor);
   });
 
+  it('should delete an author by ID', () => {
+    service.deleteAuthor(1).subscribe(response => {
+      expect(response).toBeTruthy(); // Assuming the response is truthy on successful deletion
+    });
+
+    const req = httpMock.expectOne('http://localhost:3000/authors/1');
+    expect(req.request.method).toBe('DELETE');
+    req.flush({}); // Simulate a successful deletion response
+  });
+
   afterEach(() => {
     httpMock.verify();
   });
