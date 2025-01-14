@@ -1,6 +1,4 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router'; // Importing ActivatedRoute
-import { of } from 'rxjs'; // Importing of from rxjs
 
 import { AuthorEditComponent } from './author-edit.component';
 
@@ -10,15 +8,7 @@ describe('AuthorEditComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AuthorEditComponent],
-      providers: [
-        {
-          provide: ActivatedRoute,
-          useValue: {
-            params: of({ id: '1' }) // Mocking a route parameter as an observable
-          }
-        }
-      ]
+      imports: [AuthorEditComponent]
     })
     .compileComponents();
 
