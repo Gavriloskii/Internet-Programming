@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing'; // Importing HttpClientTestingModule
 
 import { AuthorListComponent } from './author-list.component';
 
@@ -8,7 +9,7 @@ describe('AuthorListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [AuthorListComponent]
+      imports: [AuthorListComponent, HttpClientTestingModule]
     })
     .compileComponents();
 

@@ -19,6 +19,33 @@ describe('AuthorsService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('should fetch all authors', () => {
+    const mockAuthors: Author[] = [
+      {
+        id: 1,
+        name: 'Paolo Bacigalupi',
+        birth_date: '1972-08-06',
+        nationality: 'American',
+        bibliography: []
+      },
+      {
+        id: 2,
+        name: 'New Author',
+        birth_date: '1990-01-01',
+        nationality: 'Unknown',
+        bibliography: []
+      }
+    ];
+
+    service.getAuthors().subscribe(authors => {
+      expect(authors).toEqual(mockAuthors);
+    });
+
+    const req = httpMock.expectOne('http://localhost:3000/authors');
+    expect(req.request.method).toBe('GET');
+    req.flush(mockAuthors);
+  });
+
   it('should fetch an author by ID', () => {
     const mockAuthor: Author = {
       id: 1,
