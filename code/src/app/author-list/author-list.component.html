@@ -1,21 +1,30 @@
-
-<input type="text" [(ngModel)]="search" placeholder="Search by author name" (change)="filterAuthors()">
-
-<table>
-    <tr>
-        <th>Author</th>
-        <th>Books</th>
+<div>
+  <h2>Author List</h2>
+  <input type="text" [(ngModel)]="search" (input)="filterAuthors()" placeholder="Search by name" />
+  <button (click)="addAuthor()">Add Author</button>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Birth Date</th>
+        <th>Nationality</th>
+        <th>Bibliography Count</th>
         <th>Actions</th>
-    </tr>
-    @for (author of displayAuthors; track $index) {
-        <tr>
-            <td>{{ author.name }}</td>
-            <td>{{ author.bibliography.length }}</td>
-            <td>
-                <a [routerLink]="['/authors', author.id]">View</a>
-                <a [routerLink]="['/authors', author.id, 'edit']">Edit</a>
-                <a (click)="deleteAuthor(author.id)">Delete</a>
-            </td>
-        </tr>
-    }
-</table>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let author of displayAuthors">
+        <td>{{ author.id }}</td>
+        <td>{{ author.name }}</td>
+        <td>{{ author.birth_date | date }}</td>
+        <td>{{ author.nationality }}</td>
+        <td>{{ author.bibliography }}</td>
+        <td>
+          <button (click)="editAuthor(author.id)">Edit</button>
+          <button (click)="deleteAuthor(author.id)">Delete</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

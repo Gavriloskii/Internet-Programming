@@ -1,0 +1,19 @@
+<form (ngSubmit)="onSubmit()" #authorForm="ngForm">
+  <div>
+    <label for="name">Name:</label>
+    <input type="text" id="name" required [(ngModel)]="author.name" name="name">
+  </div>
+  <div>
+    <label for="birth_date">Birth Date:</label>
+    <input type="date" id="birth_date" required [(ngModel)]="author.birth_date" name="birth_date">
+  </div>
+  <div>
+    <label for="death_date">Death Date (optional):</label>
+    <input type="date" id="death_date" [(ngModel)]="author.death_date" name="death_date">
+  </div>
+  <div>
+    <label for="nationality">Nationality:</label>
+    <input type="text" id="nationality" required [(ngModel)]="author.nationality" name="nationality">
+  </div>
+  <button type="submit" [disabled]="!authorForm.form.valid">Add Author</button>
+</form>

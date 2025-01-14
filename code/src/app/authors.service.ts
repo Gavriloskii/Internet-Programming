@@ -20,4 +20,14 @@ export class AuthorsService {
     const url = `${BASE_URL}/authors/${id}`;
     return this.http.get<Author>(url);
   }
+
+  updateAuthor(id: number, author: Author) {
+    const url = `${BASE_URL}/authors/${id}`;
+    return this.http.put(url, author);
+  }
+
+  deleteAuthor(id: number) {
+    const url = `${BASE_URL}/authors/${id}`;
+    return this.http.delete(url);
+  }
 }

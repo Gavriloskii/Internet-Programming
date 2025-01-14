@@ -4,11 +4,11 @@ export interface Author {
     birth_date: string;
     nationality: string;
     bibliography: Book[];
+    death_date?: string; // Optional death date
 }
 
 export interface Book {
-    name: number;
+    name: string;
     type: string;
     year: number;
 }
-
